@@ -22,6 +22,15 @@ document.addEventListener('DOMContentLoaded', function() {
         e.preventDefault();
         saveData();
     });
+    
+    // 检查URL参数是否需要测试分析功能
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('testAnalysis')) {
+        console.log('检测到测试参数，将生成测试分析数据');
+        setTimeout(() => {
+            testAnalysisGeneration();
+        }, 1000);
+    }
 });
 
 // Function to load data from Cloudflare KV
@@ -119,7 +128,13 @@ async function saveData() {
         
         // 触发饮食和运动分析
         if (diet || exercise) {
-            await generateAnalysis(date, diet, exercise, weight);
+            console.log('检测到饮食或运动记录，触发分析...');
+            try {
+                await generateAnalysis(date, diet, exercise, weight);
+                console.log('分析已完成');
+            } catch (analysisError) {
+                console.error('生成分析时出错:', analysisError);
+            }
         }
         
         // Show success message with wobble animation
@@ -149,6 +164,7 @@ async function generateAnalysis(date, diet, exercise, weight) {
     if (!diet && !exercise) return;
     
     try {
+        console.log('开始生成分析数据...', date, weight);
         const previousData = getPreviousDataForAnalysis(date);
         
         // 构建发送给大模型的提示词
@@ -197,15 +213,19 @@ ${previousData.map(item => `日期：${formatDate(item.date)}，体重：${item.
         });
         
         if (!response.ok) {
-            throw new Error('Failed to generate analysis');
+            const errorData = await response.json();
+            console.error('API响应错误:', errorData);
+            throw new Error(`Failed to generate analysis: ${response.status} ${response.statusText}`);
         }
         
         const responseData = await response.json();
+        console.log('API响应成功:', responseData);
         let analysisResult;
         
         try {
             // 尝试解析JSON响应
             const content = responseData.choices[0].message.content;
+            console.log('大模型返回内容:', content);
             
             // 查找JSON内容（可能被包含在代码块内）
             const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || 
@@ -234,11 +254,35 @@ ${previousData.map(item => `日期：${formatDate(item.date)}，体重：${item.
             };
         }
         
+        console.log('分析结果:', analysisResult);
+        
         // 存储分析结果
         analysisData[date] = analysisResult;
         
         // 存储到本地作为备份
         localStorage.setItem('analysisData', JSON.stringify(analysisData));
+        
+        // 将分析结果保存到云端
+        try {
+            const saveResponse = await fetch(ANALYSIS_API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    date: date,
+                    ...analysisResult
+                })
+            });
+            
+            if (!saveResponse.ok) {
+                console.error('保存分析到云端失败:', await saveResponse.json());
+            } else {
+                console.log('分析数据已保存到云端');
+            }
+        } catch (saveError) {
+            console.error('保存分析数据出错:', saveError);
+        }
         
         // 更新UI显示
         updateAnalysisContent();
@@ -269,9 +313,11 @@ function getPreviousDataForAnalysis(currentDate) {
 // 更新分析内容显示
 function updateAnalysisContent() {
     const analysisContainer = document.getElementById('analysis-content');
+    console.log('更新分析内容显示，当前数据:', analysisData);
     
     // 如果没有分析数据，显示提示
-    if (Object.keys(analysisData).length === 0) {
+    if (!analysisData || Object.keys(analysisData).length === 0) {
+        console.log('没有分析数据可显示');
         analysisContainer.innerHTML = '<p class="no-analysis">暂无分析数据</p>';
         return;
     }
@@ -281,8 +327,18 @@ function updateAnalysisContent() {
     
     // 获取最近的分析结果（按日期倒序）
     const sortedDates = Object.keys(analysisData).sort((a, b) => new Date(b) - new Date(a));
+    console.log('排序后的分析日期:', sortedDates);
+    
+    if (sortedDates.length === 0) {
+        console.log('排序后没有有效日期');
+        analysisContainer.innerHTML = '<p class="no-analysis">暂无分析数据</p>';
+        return;
+    }
+    
     const latestDate = sortedDates[0];
     const latestAnalysis = analysisData[latestDate];
+    console.log('最新分析日期:', latestDate);
+    console.log('最新分析内容:', latestAnalysis);
     
     // 创建分析内容
     const analysisItem = document.createElement('div');
@@ -293,6 +349,22 @@ function updateAnalysisContent() {
     dateElement.className = 'analysis-date';
     dateElement.textContent = formatDate(latestDate);
     analysisItem.appendChild(dateElement);
+    
+    // 检查是否有有效的分析内容
+    if (!latestAnalysis || 
+        (!latestAnalysis.dietAnalysis && 
+         !latestAnalysis.exerciseAnalysis && 
+         !latestAnalysis.calorieAnalysis && 
+         !latestAnalysis.suggestions)) {
+        console.log('最新分析数据为空');
+        const noDataMsg = document.createElement('p');
+        noDataMsg.textContent = '此日期的分析数据不完整';
+        noDataMsg.style.fontStyle = 'italic';
+        noDataMsg.style.color = '#888';
+        analysisItem.appendChild(noDataMsg);
+        analysisContainer.appendChild(analysisItem);
+        return;
+    }
     
     // 添加饮食分析
     if (latestAnalysis.dietAnalysis) {
@@ -348,6 +420,7 @@ function updateAnalysisContent() {
     
     // 添加到容器
     analysisContainer.appendChild(analysisItem);
+    console.log('分析内容已更新到界面');
 }
 
 // Function to update the chart
@@ -492,23 +565,29 @@ function updateWeightChange() {
         message += `恭喜！已达到目标体重(${targetWeight}kg) 🎊`;
     }
     
-    // 设置显示样式
-    weightChangeElement.style.whiteSpace = 'pre-line'; // 保留换行符
-    weightChangeElement.textContent = message;
+    // 确保使用HTML元素显示每一行
+    const lines = message.split('\n');
+    weightChangeElement.innerHTML = '';
     
-    // 设置文字颜色
-    if (weightData.length > 1) {
-        const difference = currentWeight - weightData[weightData.length - 2].weight;
-        if (difference < 0) {
-            weightChangeElement.style.color = 'green';
-        } else if (difference > 0) {
-            weightChangeElement.style.color = 'red';
-        } else {
-            weightChangeElement.style.color = '#333';
+    lines.forEach(line => {
+        if (line.trim()) {
+            const paragraph = document.createElement('p');
+            paragraph.textContent = line;
+            
+            // 根据内容设置不同的样式
+            if (line.includes('减少')) {
+                paragraph.style.color = 'green';
+                paragraph.style.fontWeight = 'bold';
+            } else if (line.includes('增加')) {
+                paragraph.style.color = 'red';
+            } else if (line.includes('恭喜')) {
+                paragraph.style.color = 'green';
+                paragraph.style.fontWeight = 'bold';
+            }
+            
+            weightChangeElement.appendChild(paragraph);
         }
-    } else {
-        weightChangeElement.style.color = '#333';
-    }
+    });
 }
 
 // Function to update history list
@@ -576,4 +655,23 @@ function formatDate(dateString) {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}年${month}月${day}日`;
+}
+
+// 测试分析生成功能的函数
+async function testAnalysisGeneration() {
+    try {
+        const today = new Date();
+        const date = today.toISOString().split('T')[0];
+        const testDiet = "早餐：全麦面包两片，一杯牛奶，一个苹果；午餐：糙米饭一碗，清蒸鱼一条，西兰花200克；晚餐：鸡胸肉沙拉一份，南瓜汤一碗；加餐：酸奶一杯";
+        const testExercise = "慢跑5公里，用时30分钟；俯卧撑3组，每组15个；仰卧起坐3组，每组20个；平板支撑2分钟3组";
+        const testWeight = 78.5;
+        
+        console.log('生成测试分析数据...');
+        document.getElementById('analysis-content').innerHTML = '<p class="no-analysis">正在生成测试分析数据，请稍候...</p>';
+        
+        await generateAnalysis(date, testDiet, testExercise, testWeight);
+        console.log('测试分析数据已生成');
+    } catch (error) {
+        console.error('测试分析数据生成失败:', error);
+    }
 } 

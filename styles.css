@@ -183,6 +183,11 @@ input:focus, textarea:focus {
     border: 2px dashed var(--primary-color);
 }
 
+.weight-change p {
+    margin: 6px 0;
+    line-height: 1.5;
+}
+
 .history-list {
     max-height: 500px;
     overflow-y: auto;
