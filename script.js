@@ -192,59 +192,64 @@ ${previousData.map(item => `日期：${formatDate(item.date)}，体重：${item.
     "suggestions": "改进建议内容..."
 }`;
 
-        // 调用OpenRouter API
-        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        // 使用Cloudflare Worker作为代理调用AI模型
+        const workerURL = config.api.workerProxyUrl;
+        
+        // 准备发送给模型的数据
+        const modelRequest = {
+            model: config.api.model,
+            messages: [
+                {
+                    role: "user",
+                    content: prompt
+                }
+            ],
+            temperature: config.api.temperature,
+            max_tokens: config.api.maxTokens
+        };
+        
+        console.log('发送请求到Worker代理...');
+        const response = await fetch(workerURL, {
             method: "POST",
             headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${config.openRouter.apiKey}`,
-                "HTTP-Referer": encodeURI(window.location.origin),
-                "X-Title": "Weight Tracker App"  // 使用英文标题避免编码问题
+                "Content-Type": "application/json"
             },
-            body: JSON.stringify({
-                model: config.openRouter.model,
-                messages: [
-                    {
-                        role: "user",
-                        content: prompt
-                    }
-                ]
-            })
+            body: JSON.stringify(modelRequest)
         });
         
         if (!response.ok) {
-            const errorData = await response.json();
-            console.error('API响应错误:', errorData);
-            throw new Error(`Failed to generate analysis: ${response.status} ${response.statusText}`);
+            const errorText = await response.text();
+            console.error('Worker代理响应错误:', response.status, errorText);
+            throw new Error(`Worker proxy responded with status ${response.status}: ${errorText}`);
         }
         
         const responseData = await response.json();
-        console.log('API响应成功:', responseData);
+        console.log('Worker代理响应成功:', responseData);
         let analysisResult;
         
         try {
-            // 尝试解析JSON响应
+            // 尝试解析模型响应
             const content = responseData.choices[0].message.content;
             console.log('大模型返回内容:', content);
             
             // 查找JSON内容（可能被包含在代码块内）
             const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || 
-                             content.match(/```\s*([\s\S]*?)\s*```/) ||
-                             content.match(/{[\s\S]*?}/);
-                             
+                            content.match(/```\s*([\s\S]*?)\s*```/) ||
+                            content.match(/{[\s\S]*?}/);
+                            
             if (jsonMatch) {
                 analysisResult = JSON.parse(jsonMatch[1] || jsonMatch[0]);
             } else {
                 // 如果无法解析为JSON，则创建一个简单的结果
                 analysisResult = {
-                    dietAnalysis: "无法生成饮食分析。",
-                    exerciseAnalysis: "无法生成运动分析。",
-                    calorieAnalysis: "无法生成热量分析。",
-                    suggestions: "请稍后再试。"
+                    dietAnalysis: content.includes("饮食") ? extractSection(content, "饮食") : "无法解析饮食分析。",
+                    exerciseAnalysis: content.includes("运动") ? extractSection(content, "运动") : "无法解析运动分析。",
+                    calorieAnalysis: content.includes("热量") ? extractSection(content, "热量") : "无法解析热量分析。",
+                    suggestions: content.includes("建议") ? extractSection(content, "建议") : "无法解析建议。"
                 };
             }
         } catch (parseError) {
-            console.error('Error parsing model response:', parseError);
+            console.error('解析模型响应出错:', parseError);
             // 创建一个默认的分析结果
             analysisResult = {
                 dietAnalysis: "饮食分析生成失败，请稍后再试。",
@@ -254,7 +259,7 @@ ${previousData.map(item => `日期：${formatDate(item.date)}，体重：${item.
             };
         }
         
-        console.log('分析结果:', analysisResult);
+        console.log('最终分析结果:', analysisResult);
         
         // 存储分析结果
         analysisData[date] = analysisResult;
@@ -288,8 +293,35 @@ ${previousData.map(item => `日期：${formatDate(item.date)}，体重：${item.
         updateAnalysisContent();
         
     } catch (error) {
-        console.error('Error generating analysis:', error);
+        console.error('生成分析时出错:', error);
     }
+}
+
+// 从文本中提取特定部分的辅助函数
+function extractSection(text, sectionName) {
+    const lines = text.split('\n');
+    let extracting = false;
+    let result = '';
+    
+    for (const line of lines) {
+        if (line.toLowerCase().includes(sectionName.toLowerCase())) {
+            extracting = true;
+            continue;
+        }
+        
+        if (extracting) {
+            // 如果遇到其他标题，停止提取
+            if (/^\d+\.|\b(饮食|运动|热量|建议)\b/i.test(line) && !line.toLowerCase().includes(sectionName.toLowerCase())) {
+                break;
+            }
+            
+            if (line.trim()) {
+                result += (result ? ' ' : '') + line.trim();
+            }
+        }
+    }
+    
+    return result || `未找到${sectionName}相关内容`;
 }
 
 // 获取用于分析的历史数据

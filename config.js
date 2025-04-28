@@ -1,10 +1,13 @@
 // 配置文件 - 用于存储API密钥和其他配置
 const config = {
-    // OpenRouter API配置
-    openRouter: {
-        apiKey: "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", // 替换为实际的OpenRouter API密钥
-        model: "deepseek/deepseek-chat-v3-0324:free",
-        siteTitle: "Weight Tracker App"  // 使用英文标题避免编码问题
+    // API配置
+    api: {
+        // Worker代理URL
+        workerProxyUrl: 'https://mingwebdatabase.guba396.workers.dev/',
+        // 模型配置
+        model: "deepseek-v3-241226",
+        temperature: 0.7,
+        maxTokens: 800
     },
     
     // Cloudflare Workers API配置
