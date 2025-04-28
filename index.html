@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>王德廷的减肥追踪</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Kalam:wght@300;400;700&family=Noto+Sans+SC:wght@300;400;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <header>
+        <h1>王德廷的减肥追踪</h1>
+    </header>
+
+    <main>
+        <section id="input-section" class="card">
+            <h2>记录今天</h2>
+            <form id="entry-form">
+                <div class="form-group">
+                    <label for="date">日期:</label>
+                    <input type="date" id="date" name="date" required>
+                </div>
+                <div class="form-group">
+                    <label for="weight">体重 (kg):</label>
+                    <input type="number" id="weight" name="weight" step="0.1" required placeholder="例如: 75.5">
+                </div>
+                <div class="form-group">
+                    <label for="exercise">运动记录:</label>
+                    <textarea id="exercise" name="exercise" rows="3" placeholder="例如: 跑步 5 公里, 30 分钟"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="diet">饮食记录:</label>
+                    <textarea id="diet" name="diet" rows="4" placeholder="例如: 早餐: 全麦面包, 牛奶..."></textarea>
+                </div>
+                <button type="submit" class="button-submit">保存记录</button>
+                <p id="submit-status" class="status-message"></p>
+            </form>
+        </section>
+
+        <section id="chart-section" class="card">
+            <h2>体重变化趋势</h2>
+            <div class="chart-container">
+                 <canvas id="weightChart"></canvas>
+            </div>
+             <p id="weight-change-info" class="analysis-info">正在加载数据...</p>
+        </section>
+
+        <section id="history-section" class="card">
+            <h2>历史记录</h2>
+            <div id="history-log">
+                <p>暂无历史记录。</p>
+                <!-- History entries will be loaded here -->
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>为王德廷量身定做的小工具</p>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html> 

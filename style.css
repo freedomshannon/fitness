@@ -1,0 +1,228 @@
+/* --- Base Styles & Sketch Theme --- */
+body {
+    font-family: 'Noto Sans SC', sans-serif; /* Basic readable font */
+    background-color: #fdfbf5; /* Light parchment texture */
+    color: #333;
+    margin: 0;
+    padding: 20px;
+    line-height: 1.6;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+main {
+    flex-grow: 1;
+}
+
+/* Use Kalam for headings and specific elements for sketch feel */
+h1, h2 {
+    font-family: 'Kalam', cursive;
+    font-weight: 700;
+    color: #0077cc; /* Soft blue */
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+h1 {
+    font-size: 2.8em;
+    margin-bottom: 30px;
+    border-bottom: 3px solid #0077cc;
+    display: inline-block; /* Allows border to fit content */
+    padding-bottom: 5px;
+}
+
+header, footer {
+    text-align: center;
+    margin-bottom: 30px;
+    font-family: 'Kalam', cursive;
+    color: #555;
+}
+
+footer {
+    margin-top: 40px;
+    font-size: 0.9em;
+    color: #888;
+}
+
+/* --- Card Layout & Sketchy Borders --- */
+.card {
+    background-color: #ffffff;
+    padding: 25px;
+    margin-bottom: 30px;
+    border-radius: 8px; /* Slightly rounded corners */
+    border: 2px solid #ddd; /* Base border */
+    box-shadow: 3px 3px 0px #eee; /* Simple shadow for depth */
+    /* Sketchy border effect - subtle */
+    border-style: solid;
+    border-width: 2px;
+    border-color: #ccc #aaa #aaa #ccc; /* Creates uneven look */
+    transition: transform 0.2s ease-in-out;
+}
+
+/* Slight wobble on hover */
+.card:hover {
+   transform: rotate(-0.5deg) scale(1.01);
+}
+
+/* --- Form Styling --- */
+#entry-form {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+}
+
+label {
+    font-family: 'Kalam', cursive;
+    font-weight: 400;
+    margin-bottom: 5px;
+    color: #555;
+}
+
+input[type="date"],
+input[type="number"],
+textarea {
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-family: 'Noto Sans SC', sans-serif;
+    font-size: 1rem;
+    background-color: #fff;
+    box-shadow: inset 1px 1px 2px rgba(0,0,0,0.1);
+    /* Sketchy border attempt */
+    border-style: solid;
+    border-width: 1px;
+    border-color: #ddd #bbb #bbb #ddd;
+}
+
+input:focus,
+textarea:focus {
+    outline: none;
+    border-color: #ffcc00; /* Vibrant yellow accent */
+    box-shadow: 0 0 5px rgba(255, 204, 0, 0.5);
+}
+
+/* --- Button Styling --- */
+.button-submit {
+    font-family: 'Kalam', cursive;
+    font-size: 1.1em;
+    font-weight: 700;
+    padding: 12px 20px;
+    background-color: #ffcc00; /* Vibrant yellow */
+    color: #333;
+    border: 2px solid #e6b800;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    align-self: center; /* Center button */
+    margin-top: 10px;
+    box-shadow: 2px 2px 0px #e6b800;
+}
+
+.button-submit:hover {
+    background-color: #ffe066;
+    transform: translateY(-2px);
+    box-shadow: 4px 4px 0px #e6b800;
+}
+
+.button-submit:active {
+    transform: translateY(1px);
+    box-shadow: 1px 1px 0px #e6b800;
+}
+
+/* --- Chart & Analysis --- */
+.chart-container {
+    position: relative;
+    /* Make container slightly larger than canvas if needed */
+    padding: 10px;
+    border: 1px dashed #ccc; /* Dashed border like a sketch */
+    margin-bottom: 15px;
+}
+
+#weightChart {
+    max-width: 100%;
+    height: auto;
+}
+
+.analysis-info {
+    font-family: 'Kalam', cursive;
+    font-size: 1.2em;
+    text-align: center;
+    margin-top: 10px;
+    color: #0077cc; /* Soft blue */
+    font-weight: 400;
+}
+
+/* --- History Log --- */
+#history-log {
+    max-height: 400px;
+    overflow-y: auto;
+    border-top: 1px dashed #ccc;
+    margin-top: 15px;
+    padding-top: 15px;
+}
+
+.history-entry {
+    background-color: #f9f9f9;
+    padding: 15px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+    border: 1px solid #eee;
+    border-left: 5px solid #ffcc00; /* Accent line */
+}
+
+.history-entry h3 {
+    font-family: 'Kalam', cursive;
+    margin-top: 0;
+    margin-bottom: 8px;
+    color: #0077cc;
+}
+
+.history-entry p {
+    margin: 5px 0;
+    font-size: 0.95em;
+}
+
+.history-entry strong {
+   font-weight: bold;
+   color: #333;
+}
+
+/* --- Status Messages --- */
+.status-message {
+    text-align: center;
+    margin-top: 10px;
+    font-weight: bold;
+}
+
+#submit-status.success {
+    color: #28a745; /* Green */
+}
+
+#submit-status.error {
+    color: #dc3545; /* Red */
+}
+
+/* --- Responsive (Basic) --- */
+@media (max-width: 768px) {
+    body {
+        padding: 10px;
+    }
+    h1 {
+        font-size: 2.2em;
+    }
+    .card {
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+    input[type="date"],
+    input[type="number"],
+    textarea {
+        font-size: 0.95rem;
+    }
+} 
