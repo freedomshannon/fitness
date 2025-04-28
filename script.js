@@ -487,99 +487,118 @@ async function callModelAPI(weightData) {
         prompt += "4. 个性化的健康建议\n\n";
         prompt += "要求分析详细专业但通俗易懂，直接给出分析结果，不要输出思考过程。";
         
-        // 设置重试次数和延迟
-        const maxRetries = 3;
-        const retryDelay = 1000; // 1秒
-        
-        // 重试逻辑
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            try {
-                console.log(`尝试API调用 (${attempt}/${maxRetries})...`);
-                
-                // 使用代理API进行调用 - 尝试不同的端点格式
-                let response;
-                
-                if (attempt === 1) {
-                    // 第一次尝试 /api/analyze
-                    response = await fetch('https://mingwebdatabase.guba396.workers.dev/api/analyze', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json'
+        // 显示加载状态
+        const analysisElement = document.getElementById('diet-exercise-analysis');
+        if (analysisElement) {
+            analysisElement.innerHTML = '<div class="loading-spinner"></div> <p>正在分析饮食和运动数据...</p>';
+        }
+
+        // 使用与易经占卜应用相同的API调用格式
+        try {
+            const response = await fetch('https://mingdata.shannonwang.top/api/proxy', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    model: "deepseek-v3-241226",
+                    messages: [
+                        {
+                            role: "system",
+                            content: "你是一位专业的健康顾问和营养师。请针对用户的健康记录提供详细的分析和建议。直接给出分析结果，不要显示思考过程。"
                         },
-                        body: JSON.stringify({
-                            prompt: prompt
-                        })
-                    });
-                } else if (attempt === 2) {
-                    // 第二次尝试使用根路径
-                    response = await fetch('https://mingwebdatabase.guba396.workers.dev', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            prompt: prompt
-                        })
-                    });
-                } else {
-                    // 第三次尝试使用GET请求
-                    const encodedPrompt = encodeURIComponent(prompt);
-                    response = await fetch(`https://mingwebdatabase.guba396.workers.dev/api/analyze?prompt=${encodedPrompt}`, {
-                        method: 'GET',
-                        headers: {
-                            'Accept': 'application/json'
+                        {
+                            role: "user",
+                            content: prompt
                         }
-                    });
-                }
-                
-                if (!response.ok) {
-                    const status = response.status;
-                    console.error(`API请求失败，状态码: ${status}，尝试次数: ${attempt}/${maxRetries}`);
-                    
-                    if (attempt === maxRetries) {
-                        throw new Error(`API请求失败，状态码: ${status}`);
-                    }
-                    
-                    // 等待一段时间后重试
-                    await new Promise(resolve => setTimeout(resolve, retryDelay));
-                    continue;
-                }
-                
-                const data = await response.json();
-                console.log('API响应:', data);
-                
-                // 从响应中获取大模型生成的分析结果
-                const analysis = data.analysis || data.content || data.result || data.response || '';
-                
-                if (!analysis) {
-                    console.error('API返回的分析结果为空');
-                    throw new Error('分析结果为空');
-                }
-                
-                // 将大模型分析结果格式化为HTML
-                let analysisHTML = formatModelAnalysis(analysis);
-                
-                // 保存到localStorage
-                localStorage.setItem('model-diet-exercise-analysis', analysisHTML);
-                
-                return analysisHTML;
-            } catch (retryError) {
-                if (attempt === maxRetries) {
-                    throw retryError;
-                }
-                console.error(`第${attempt}次尝试失败:`, retryError);
-                // 等待一段时间后重试
-                await new Promise(resolve => setTimeout(resolve, retryDelay));
+                    ]
+                })
+            });
+
+            // 如果服务器返回错误，处理错误情况
+            if (!response.ok) {
+                console.error('API请求失败，状态码:', response.status);
+                throw new Error('API请求失败');
             }
+
+            const data = await response.json();
+            console.log('API响应:', data);
+            
+            // 从响应中获取大模型生成的分析结果 - 兼容多种返回格式
+            const analysis = data.choices?.[0]?.message?.content || data.analysis || data.content || data.result || '';
+            
+            if (!analysis) {
+                console.error('API返回的分析结果为空');
+                throw new Error('分析结果为空');
+            }
+            
+            // 将大模型分析结果格式化为HTML
+            let analysisHTML = formatModelAnalysis(analysis);
+            
+            // 保存到localStorage
+            localStorage.setItem('model-diet-exercise-analysis', analysisHTML);
+            
+            return analysisHTML;
+            
+        } catch (error) {
+            console.error('大模型API调用失败:', error);
+            
+            // 提供备用分析或错误提示
+            const basicAnalysis = generateBasicAnalysis(recentRecords);
+            const basicAnalysisHTML = formatModelAnalysis(basicAnalysis);
+            
+            // 保存基础分析到localStorage
+            localStorage.setItem('model-diet-exercise-analysis', basicAnalysisHTML);
+            
+            return basicAnalysisHTML;
         }
         
-        throw new Error('所有API请求尝试均失败');
     } catch (error) {
         console.error('调用大模型API失败:', error);
         return null; // 失败时返回null而不是抛出异常
     }
+}
+
+// 生成基础分析（当API调用失败时的备用方案）
+function generateBasicAnalysis(records) {
+    if (records.length < 2) {
+        return "记录数据不足，无法进行分析。请继续记录您的健康数据，以便获得更准确的分析。";
+    }
+    
+    // 计算体重变化
+    const latestWeight = records[0].weight;
+    const oldestWeight = records[records.length - 1].weight;
+    const weightChange = latestWeight - oldestWeight;
+    const weightChangeText = weightChange > 0 
+        ? `增加了${weightChange.toFixed(1)}kg` 
+        : weightChange < 0 
+            ? `减少了${Math.abs(weightChange).toFixed(1)}kg` 
+            : "保持稳定";
+    
+    // 基础分析文本
+    let analysis = "基础健康数据分析\n\n";
+    
+    analysis += `1. 体重变化分析\n\n`;
+    analysis += `在记录期间，您的体重${weightChangeText}。`;
+    
+    if (weightChange > 0) {
+        analysis += "建议增加运动量并控制饮食摄入，尤其是减少高热量、高脂肪食物的摄入。\n\n";
+    } else if (weightChange < 0) {
+        analysis += "体重下降是个好的开始，建议继续保持健康的饮食和运动习惯。\n\n";
+    } else {
+        analysis += "体重稳定说明您的热量摄入和消耗基本平衡。如果您有减重目标，需要调整饮食结构或增加运动量。\n\n";
+    }
+    
+    analysis += `2. 一般建议\n\n`;
+    analysis += "- 每天饮水2000ml以上\n";
+    analysis += "- 保持每周至少150分钟中等强度运动\n";
+    analysis += "- 增加蛋白质摄入，如鱼肉、鸡胸肉、豆制品等\n";
+    analysis += "- 多摄入新鲜蔬果，减少精制碳水化合物\n";
+    analysis += "- 保持规律作息，确保充足睡眠\n\n";
+    
+    analysis += "注：由于系统暂时无法连接AI分析服务，以上为基础分析。请稍后再试获取更详细的个性化分析。";
+    
+    return analysis;
 }
 
 // 格式化大模型分析结果为HTML
