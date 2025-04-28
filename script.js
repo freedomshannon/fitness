@@ -104,15 +104,18 @@ async function saveData() {
         return;
     }
     
+    // 创建当前记录对象
+    const currentRecord = { date, weight, exercise, diet };
+    
     // Check if we already have data for this date
     const existingIndex = weightData.findIndex(item => item.date === date);
     
     if (existingIndex >= 0) {
         // Update existing data
-        weightData[existingIndex] = { date, weight, exercise, diet };
+        weightData[existingIndex] = currentRecord;
     } else {
         // Add new data and sort by date
-        weightData.push({ date, weight, exercise, diet });
+        weightData.push(currentRecord);
         weightData.sort((a, b) => new Date(a.date) - new Date(b.date));
     }
     
@@ -149,35 +152,30 @@ async function saveData() {
             return;
         }
         
-        // 每次保存数据都调用大模型API分析（只要有数据）
-        if (weightData.length > 0) {
-            console.log('开始进行AI分析');
-            // 显示加载状态
-            analysisElement.innerHTML = '<div class="loading-spinner"></div> <p>正在分析饮食和运动数据...</p>';
-            
-            // 调用大模型API
-            callModelAPI(weightData).then(analysisHTML => {
-                if (analysisHTML) {
-                    // 分析完成后更新UI
-                    analysisElement.innerHTML = analysisHTML;
-                } else {
-                    console.error('大模型分析失败');
-                    // 分析失败后显示错误信息
-                    let errorContent = '<h3>AI健康分析</h3>';
-                    errorContent += '<p>抱歉，AI分析请求失败，请稍后再保存数据重试</p>';
-                    analysisElement.innerHTML = errorContent;
-                }
-            }).catch(error => {
-                console.error('大模型分析失败:', error);
+        // 只分析刚刚保存的数据
+        console.log('开始分析刚保存的数据:', currentRecord);
+        // 显示加载状态
+        analysisElement.innerHTML = '<div class="loading-spinner"></div> <p>正在分析今日饮食和运动数据...</p>';
+        
+        // 调用大模型API，只传入当前记录
+        callModelAPI([currentRecord]).then(analysisHTML => {
+            if (analysisHTML) {
+                // 分析完成后更新UI
+                analysisElement.innerHTML = analysisHTML;
+            } else {
+                console.error('大模型分析失败');
                 // 分析失败后显示错误信息
                 let errorContent = '<h3>AI健康分析</h3>';
                 errorContent += '<p>抱歉，AI分析请求失败，请稍后再保存数据重试</p>';
                 analysisElement.innerHTML = errorContent;
-            });
-        } else {
-            console.log('没有足够数据，跳过分析');
-            updateDietExerciseAnalysis();
-        }
+            }
+        }).catch(error => {
+            console.error('大模型分析失败:', error);
+            // 分析失败后显示错误信息
+            let errorContent = '<h3>AI健康分析</h3>';
+            errorContent += '<p>抱歉，AI分析请求失败，请稍后再保存数据重试</p>';
+            analysisElement.innerHTML = errorContent;
+        });
         
         // Show success message with wobble animation
         const btn = document.querySelector('.btn');
@@ -451,32 +449,32 @@ function updateDietExerciseAnalysis() {
 // 使用大模型分析数据
 async function callModelAPI(weightData) {
     try {
-        // 获取最新记录（今天的数据）
-        const todayRecord = [...weightData].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
-        
-        // 如果没有记录，不进行API调用
-        if (!todayRecord) {
+        // 确保有记录数据
+        if (!weightData || weightData.length === 0) {
             console.log('没有记录数据，无法进行大模型分析');
             return null;
         }
         
-        console.log('准备调用API，分析今日记录');
+        // 获取要分析的记录（传入的应该只有一条）
+        const recordToAnalyze = weightData[0];
+        
+        console.log('准备分析数据:', recordToAnalyze);
         
         // 生成提示词
         let prompt = "请分析以下健康记录数据，并提供饮食和运动方面的建议：\n\n";
         
-        // 只添加今天的记录
-        prompt += `日期: ${formatDate(todayRecord.date)}\n`;
-        prompt += `体重: ${todayRecord.weight} kg\n`;
+        // 添加记录信息
+        prompt += `日期: ${formatDate(recordToAnalyze.date)}\n`;
+        prompt += `体重: ${recordToAnalyze.weight} kg\n`;
         
-        if (todayRecord.exercise && todayRecord.exercise.trim() !== '') {
-            prompt += `运动记录: ${todayRecord.exercise}\n`;
+        if (recordToAnalyze.exercise && recordToAnalyze.exercise.trim() !== '') {
+            prompt += `运动记录: ${recordToAnalyze.exercise}\n`;
         } else {
             prompt += "运动记录: 无\n";
         }
         
-        if (todayRecord.diet && todayRecord.diet.trim() !== '') {
-            prompt += `饮食记录: ${todayRecord.diet}\n`;
+        if (recordToAnalyze.diet && recordToAnalyze.diet.trim() !== '') {
+            prompt += `饮食记录: ${recordToAnalyze.diet}\n`;
         } else {
             prompt += "饮食记录: 无\n";
         }
