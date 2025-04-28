@@ -149,26 +149,33 @@ async function saveData() {
             return;
         }
         
-        // 如果有饮食或运动记录，调用大模型API分析
-        console.log('饮食记录:', diet);
-        console.log('运动记录:', exercise);
-        
-        if ((diet && diet.trim() !== '') || (exercise && exercise.trim() !== '')) {
-            console.log('有饮食或运动记录，开始调用大模型分析');
+        // 每次保存数据都调用大模型API分析（只要有数据）
+        if (weightData.length > 0) {
+            console.log('开始进行AI分析');
             // 显示加载状态
             analysisElement.innerHTML = '<div class="loading-spinner"></div> <p>正在分析饮食和运动数据...</p>';
             
             // 调用大模型API
-            callModelAPI(weightData).then(() => {
-                // 分析完成后更新UI
-                updateDietExerciseAnalysis();
+            callModelAPI(weightData).then(analysisHTML => {
+                if (analysisHTML) {
+                    // 分析完成后更新UI
+                    analysisElement.innerHTML = analysisHTML;
+                } else {
+                    console.error('大模型分析失败');
+                    // 分析失败后显示错误信息
+                    let errorContent = '<h3>AI健康分析</h3>';
+                    errorContent += '<p>抱歉，AI分析请求失败，请稍后再保存数据重试</p>';
+                    analysisElement.innerHTML = errorContent;
+                }
             }).catch(error => {
                 console.error('大模型分析失败:', error);
-                // 分析失败后仍然更新UI（使用基础分析）
-                updateDietExerciseAnalysis();
+                // 分析失败后显示错误信息
+                let errorContent = '<h3>AI健康分析</h3>';
+                errorContent += '<p>抱歉，AI分析请求失败，请稍后再保存数据重试</p>';
+                analysisElement.innerHTML = errorContent;
             });
         } else {
-            console.log('没有饮食或运动记录，跳过分析');
+            console.log('没有足够数据，跳过分析');
             updateDietExerciseAnalysis();
         }
         
@@ -434,12 +441,9 @@ function updateDietExerciseAnalysis() {
         // 如果有大模型分析结果，直接显示
         analysisElement.innerHTML = modelAnalysis;
     } else {
-        // 如果没有大模型分析结果，只显示引导用户进行分析的内容
+        // 如果没有大模型分析结果，显示等待提示
         let content = '<h3>AI健康分析</h3>';
-        content += '<p>点击下方按钮，使用AI分析您的健康数据，获取个性化建议</p>';
-        content += `<div class="analysis-actions">
-            <button class="small-btn" onclick="window.reanalyzeWithModel()">开始分析</button>
-        </div>`;
+        content += '<p>请先记录体重、饮食或运动数据，保存后系统将自动分析</p>';
         analysisElement.innerHTML = content;
     }
 }
@@ -447,53 +451,49 @@ function updateDietExerciseAnalysis() {
 // 使用大模型分析数据
 async function callModelAPI(weightData) {
     try {
-        // 获取最近7天的记录
-        const recentRecords = [...weightData].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 7);
+        // 获取最新记录（今天的数据）
+        const todayRecord = [...weightData].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
         
-        // 如果记录少于2条，不进行API调用
-        if (recentRecords.length < 2) {
-            console.log('记录不足，无法进行大模型分析');
+        // 如果没有记录，不进行API调用
+        if (!todayRecord) {
+            console.log('没有记录数据，无法进行大模型分析');
             return null;
         }
         
-        console.log('准备调用API，记录数量:', recentRecords.length);
+        console.log('准备调用API，分析今日记录');
         
         // 生成提示词
         let prompt = "请分析以下健康记录数据，并提供饮食和运动方面的建议：\n\n";
         
-        recentRecords.forEach(record => {
-            prompt += `日期: ${formatDate(record.date)}\n`;
-            prompt += `体重: ${record.weight} kg\n`;
-            
-            if (record.exercise && record.exercise.trim() !== '') {
-                prompt += `运动记录: ${record.exercise}\n`;
-            } else {
-                prompt += "运动记录: 无\n";
-            }
-            
-            if (record.diet && record.diet.trim() !== '') {
-                prompt += `饮食记录: ${record.diet}\n`;
-            } else {
-                prompt += "饮食记录: 无\n";
-            }
-            
-            prompt += "\n";
-        });
+        // 只添加今天的记录
+        prompt += `日期: ${formatDate(todayRecord.date)}\n`;
+        prompt += `体重: ${todayRecord.weight} kg\n`;
         
-        prompt += "请从以下几个方面分析：\n";
-        prompt += "1. 饮食模式分析及改进建议\n";
-        prompt += "2. 运动习惯分析及改进建议\n";
-        prompt += "3. 体重变化趋势与饮食运动的关系\n";
-        prompt += "4. 个性化的健康建议\n\n";
+        if (todayRecord.exercise && todayRecord.exercise.trim() !== '') {
+            prompt += `运动记录: ${todayRecord.exercise}\n`;
+        } else {
+            prompt += "运动记录: 无\n";
+        }
+        
+        if (todayRecord.diet && todayRecord.diet.trim() !== '') {
+            prompt += `饮食记录: ${todayRecord.diet}\n`;
+        } else {
+            prompt += "饮食记录: 无\n";
+        }
+        
+        prompt += "\n请从以下几个方面分析：\n";
+        prompt += "1. 今日饮食分析及改进建议\n";
+        prompt += "2. 今日运动分析及改进建议\n";
+        prompt += "3. 针对今日饮食运动情况的健康建议\n";
+        prompt += "4. 个性化的改进方案\n\n";
         prompt += "要求分析详细专业但通俗易懂，直接给出分析结果，不要输出思考过程。";
         
         // 显示加载状态
         const analysisElement = document.getElementById('diet-exercise-analysis');
         if (analysisElement) {
-            analysisElement.innerHTML = '<div class="loading-spinner"></div> <p>正在分析饮食和运动数据...</p>';
+            analysisElement.innerHTML = '<div class="loading-spinner"></div> <p>正在分析今日饮食和运动数据...</p>';
         }
 
-        // 使用与易经占卜应用相同的API调用格式
         try {
             const response = await fetch('https://mingdata.shannonwang.top/api/proxy', {
                 method: 'POST',
@@ -505,7 +505,7 @@ async function callModelAPI(weightData) {
                     messages: [
                         {
                             role: "system",
-                            content: "你是一位专业的健康顾问和营养师。请针对用户的健康记录提供详细的分析和建议。直接给出分析结果，不要显示思考过程。"
+                            content: "你是一位专业的健康顾问和营养师。请针对用户今日的健康记录提供详细的分析和建议。直接给出分析结果，不要显示思考过程。"
                         },
                         {
                             role: "user",
@@ -543,62 +543,14 @@ async function callModelAPI(weightData) {
         } catch (error) {
             console.error('大模型API调用失败:', error);
             
-            // 提供备用分析或错误提示
-            const basicAnalysis = generateBasicAnalysis(recentRecords);
-            const basicAnalysisHTML = formatModelAnalysis(basicAnalysis);
-            
-            // 保存基础分析到localStorage
-            localStorage.setItem('model-diet-exercise-analysis', basicAnalysisHTML);
-            
-            return basicAnalysisHTML;
+            // 返回null，让调用者处理错误情况
+            return null;
         }
         
     } catch (error) {
         console.error('调用大模型API失败:', error);
         return null; // 失败时返回null而不是抛出异常
     }
-}
-
-// 生成基础分析（当API调用失败时的备用方案）
-function generateBasicAnalysis(records) {
-    if (records.length < 2) {
-        return "记录数据不足，无法进行分析。请继续记录您的健康数据，以便获得更准确的分析。";
-    }
-    
-    // 计算体重变化
-    const latestWeight = records[0].weight;
-    const oldestWeight = records[records.length - 1].weight;
-    const weightChange = latestWeight - oldestWeight;
-    const weightChangeText = weightChange > 0 
-        ? `增加了${weightChange.toFixed(1)}kg` 
-        : weightChange < 0 
-            ? `减少了${Math.abs(weightChange).toFixed(1)}kg` 
-            : "保持稳定";
-    
-    // 基础分析文本
-    let analysis = "基础健康数据分析\n\n";
-    
-    analysis += `1. 体重变化分析\n\n`;
-    analysis += `在记录期间，您的体重${weightChangeText}。`;
-    
-    if (weightChange > 0) {
-        analysis += "建议增加运动量并控制饮食摄入，尤其是减少高热量、高脂肪食物的摄入。\n\n";
-    } else if (weightChange < 0) {
-        analysis += "体重下降是个好的开始，建议继续保持健康的饮食和运动习惯。\n\n";
-    } else {
-        analysis += "体重稳定说明您的热量摄入和消耗基本平衡。如果您有减重目标，需要调整饮食结构或增加运动量。\n\n";
-    }
-    
-    analysis += `2. 一般建议\n\n`;
-    analysis += "- 每天饮水2000ml以上\n";
-    analysis += "- 保持每周至少150分钟中等强度运动\n";
-    analysis += "- 增加蛋白质摄入，如鱼肉、鸡胸肉、豆制品等\n";
-    analysis += "- 多摄入新鲜蔬果，减少精制碳水化合物\n";
-    analysis += "- 保持规律作息，确保充足睡眠\n\n";
-    
-    analysis += "注：由于系统暂时无法连接AI分析服务，以上为基础分析。请稍后再试获取更详细的个性化分析。";
-    
-    return analysis;
 }
 
 // 格式化大模型分析结果为HTML
@@ -634,10 +586,10 @@ function formatModelAnalysis(analysis) {
         }
     });
     
-    // 添加重新分析按钮
-    html += `<div class="analysis-actions">
-        <button class="small-btn" onclick="window.reanalyzeWithModel()">重新分析</button>
-    </div>`;
+    // 记录分析日期时间
+    const now = new Date();
+    const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    html += `<p class="analysis-date">分析时间: ${formattedDate}</p>`;
     
     return html;
 }
@@ -668,9 +620,6 @@ window.reanalyzeWithModel = function() {
             // 分析失败，显示错误信息和重试按钮
             let errorContent = '<h3>AI健康分析</h3>';
             errorContent += '<p>抱歉，AI分析请求失败，请稍后再试</p>';
-            errorContent += `<div class="analysis-actions">
-                <button class="small-btn" onclick="window.reanalyzeWithModel()">重试</button>
-            </div>`;
             analysisElement.innerHTML = errorContent;
         }
     });
