@@ -721,8 +721,130 @@ async function testAnalysisGeneration() {
         console.log('生成测试分析数据...');
         document.getElementById('analysis-content').innerHTML = '<p class="no-analysis">正在生成测试分析数据，请稍候...</p>';
         
-        await generateAnalysis(date, testDiet, testExercise, testWeight);
-        console.log('测试分析数据已生成');
+        // 绕过调用generateAnalysis函数，直接实现分析功能
+        try {
+            console.log('开始生成分析数据...', date, testWeight);
+            
+            // 构建提示词
+            const prompt = `作为一名专业的营养师和健身教练，请根据以下信息提供饮食和运动分析：
+            
+日期：${formatDate(date)}
+体重：${testWeight} kg
+饮食记录：${testDiet}
+运动记录：${testExercise}
+
+请提供以下分析（简明扼要）：
+1. 饮食分析：评估饮食结构、营养均衡性
+2. 运动分析：评估运动类型、强度和时长
+3. 热量分析：估算摄入和消耗的热量平衡
+4. 改进建议：针对饮食和运动提出1-2条具体建议
+
+分析格式（JSON）：
+{
+    "dietAnalysis": "饮食分析内容...",
+    "exerciseAnalysis": "运动分析内容...",
+    "calorieAnalysis": "热量分析内容...",
+    "suggestions": "改进建议内容..."
+}`;
+
+            // 直接硬编码Worker URL
+            const workerURL = "https://mingwebdatabase.guba396.workers.dev/";
+            
+            // 准备发送给模型的数据
+            const modelRequest = {
+                model: "deepseek-v3-241226",
+                messages: [
+                    {
+                        role: "user",
+                        content: prompt
+                    }
+                ],
+                temperature: 0.7,
+                max_tokens: 800
+            };
+            
+            console.log('发送请求到Worker代理...');
+            const response = await fetch(workerURL, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(modelRequest)
+            });
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Worker代理响应错误:', response.status, errorText);
+                throw new Error(`Worker proxy responded with status ${response.status}: ${errorText}`);
+            }
+            
+            const responseData = await response.json();
+            console.log('Worker代理响应成功:', responseData);
+            
+            // 处理响应
+            const content = responseData.choices[0].message.content;
+            console.log('大模型返回内容:', content);
+            
+            // 提取JSON或创建分析结果
+            let analysisResult;
+            try {
+                const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || 
+                              content.match(/```\s*([\s\S]*?)\s*```/) ||
+                              content.match(/{[\s\S]*?}/);
+                
+                if (jsonMatch) {
+                    analysisResult = JSON.parse(jsonMatch[1] || jsonMatch[0]);
+                } else {
+                    analysisResult = {
+                        dietAnalysis: content.includes("饮食") ? extractSection(content, "饮食") : "无法解析饮食分析。",
+                        exerciseAnalysis: content.includes("运动") ? extractSection(content, "运动") : "无法解析运动分析。",
+                        calorieAnalysis: content.includes("热量") ? extractSection(content, "热量") : "无法解析热量分析。",
+                        suggestions: content.includes("建议") ? extractSection(content, "建议") : "无法解析建议。"
+                    };
+                }
+            } catch (error) {
+                console.error('解析响应出错:', error);
+                analysisResult = {
+                    dietAnalysis: "饮食分析生成失败，请稍后再试。",
+                    exerciseAnalysis: "运动分析生成失败，请稍后再试。",
+                    calorieAnalysis: "热量分析生成失败，请稍后再试。",
+                    suggestions: "系统暂时无法提供有效建议，请稍后再试。"
+                };
+            }
+            
+            // 存储分析结果
+            analysisData[date] = analysisResult;
+            localStorage.setItem('analysisData', JSON.stringify(analysisData));
+            
+            // 将分析结果保存到云端
+            try {
+                const saveResponse = await fetch(ANALYSIS_API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        date: date,
+                        ...analysisResult
+                    })
+                });
+                
+                if (!saveResponse.ok) {
+                    console.error('保存分析到云端失败:', await saveResponse.text());
+                } else {
+                    console.log('分析数据已保存到云端');
+                }
+            } catch (saveError) {
+                console.error('保存分析数据出错:', saveError);
+            }
+            
+            // 更新UI显示
+            updateAnalysisContent();
+            
+        } catch (error) {
+            console.error('生成测试分析数据出错:', error);
+            document.getElementById('analysis-content').innerHTML = '<p class="no-analysis">生成分析数据失败: ' + error.message + '</p>';
+        }
     } catch (error) {
         console.error('测试分析数据生成失败:', error);
     }
