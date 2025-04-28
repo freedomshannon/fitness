@@ -1,8 +1,10 @@
 // Initialize variables for tracking data
 let weightData = [];
+let analysisData = {};
 
-// API URL - 替换为你的Cloudflare Worker URL
-const API_URL = 'https://fitnessdatabase.guba396.workers.dev/api/weight-data';
+// API URLs from config
+const API_URL = config.cloudflare.weightDataUrl;
+const ANALYSIS_API_URL = config.cloudflare.analysisDataUrl;
 
 document.addEventListener('DOMContentLoaded', function() {
     // Set today's date as default
@@ -12,6 +14,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Load data from Cloudflare KV
     loadData();
+    loadAnalysisData();
     
     // Setup form submission
     const form = document.getElementById('weight-form');
@@ -42,6 +45,27 @@ async function loadData() {
             updateChart();
             updateWeightChange();
             updateHistoryList();
+        }
+    }
+}
+
+// Function to load analysis data from Cloudflare KV
+async function loadAnalysisData() {
+    try {
+        const response = await fetch(ANALYSIS_API_URL);
+        if (!response.ok) {
+            throw new Error('Failed to fetch analysis data');
+        }
+        const data = await response.json();
+        analysisData = data || {};
+        updateAnalysisContent();
+    } catch (error) {
+        console.error('Error loading analysis data:', error);
+        // Fallback to localStorage if API fails
+        const savedData = localStorage.getItem('analysisData');
+        if (savedData) {
+            analysisData = JSON.parse(savedData);
+            updateAnalysisContent();
         }
     }
 }
@@ -93,6 +117,11 @@ async function saveData() {
         updateWeightChange();
         updateHistoryList();
         
+        // 触发饮食和运动分析
+        if (diet || exercise) {
+            await generateAnalysis(date, diet, exercise, weight);
+        }
+        
         // Show success message with wobble animation
         const btn = document.querySelector('.btn');
         btn.textContent = '保存成功!';
@@ -113,6 +142,212 @@ async function saveData() {
         console.error('Error saving data:', error);
         alert('保存失败，请稍后再试');
     }
+}
+
+// 调用大模型生成饮食和运动分析
+async function generateAnalysis(date, diet, exercise, weight) {
+    if (!diet && !exercise) return;
+    
+    try {
+        const previousData = getPreviousDataForAnalysis(date);
+        
+        // 构建发送给大模型的提示词
+        const prompt = `作为一名专业的营养师和健身教练，请根据以下信息提供饮食和运动分析：
+        
+日期：${formatDate(date)}
+体重：${weight} kg
+饮食记录：${diet || '无记录'}
+运动记录：${exercise || '无记录'}
+
+${previousData.length > 0 ? `历史数据（近7天）：
+${previousData.map(item => `日期：${formatDate(item.date)}，体重：${item.weight}kg，饮食：${item.diet || '无'}，运动：${item.exercise || '无'}`).join('\n')}` : '无历史数据'}
+
+请提供以下分析（简明扼要）：
+1. 饮食分析：评估饮食结构、营养均衡性
+2. 运动分析：评估运动类型、强度和时长
+3. 热量分析：估算摄入和消耗的热量平衡
+4. 改进建议：针对饮食和运动提出1-2条具体建议
+
+分析格式（JSON）：
+{
+    "dietAnalysis": "饮食分析内容...",
+    "exerciseAnalysis": "运动分析内容...",
+    "calorieAnalysis": "热量分析内容...",
+    "suggestions": "改进建议内容..."
+}`;
+
+        // 调用OpenRouter API
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${config.openRouter.apiKey}`,
+                "HTTP-Referer": window.location.origin,
+                "X-Title": config.openRouter.siteTitle
+            },
+            body: JSON.stringify({
+                model: config.openRouter.model,
+                messages: [
+                    {
+                        role: "user",
+                        content: prompt
+                    }
+                ]
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to generate analysis');
+        }
+        
+        const responseData = await response.json();
+        let analysisResult;
+        
+        try {
+            // 尝试解析JSON响应
+            const content = responseData.choices[0].message.content;
+            
+            // 查找JSON内容（可能被包含在代码块内）
+            const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || 
+                             content.match(/```\s*([\s\S]*?)\s*```/) ||
+                             content.match(/{[\s\S]*?}/);
+                             
+            if (jsonMatch) {
+                analysisResult = JSON.parse(jsonMatch[1] || jsonMatch[0]);
+            } else {
+                // 如果无法解析为JSON，则创建一个简单的结果
+                analysisResult = {
+                    dietAnalysis: "无法生成饮食分析。",
+                    exerciseAnalysis: "无法生成运动分析。",
+                    calorieAnalysis: "无法生成热量分析。",
+                    suggestions: "请稍后再试。"
+                };
+            }
+        } catch (parseError) {
+            console.error('Error parsing model response:', parseError);
+            // 创建一个默认的分析结果
+            analysisResult = {
+                dietAnalysis: "饮食分析生成失败，请稍后再试。",
+                exerciseAnalysis: "运动分析生成失败，请稍后再试。",
+                calorieAnalysis: "热量分析生成失败，请稍后再试。",
+                suggestions: "系统暂时无法提供有效建议，请稍后再试。"
+            };
+        }
+        
+        // 存储分析结果
+        analysisData[date] = analysisResult;
+        
+        // 存储到本地作为备份
+        localStorage.setItem('analysisData', JSON.stringify(analysisData));
+        
+        // 更新UI显示
+        updateAnalysisContent();
+        
+    } catch (error) {
+        console.error('Error generating analysis:', error);
+    }
+}
+
+// 获取用于分析的历史数据
+function getPreviousDataForAnalysis(currentDate) {
+    // 获取最近7天的数据作为参考
+    const currentDateObj = new Date(currentDate);
+    const sevenDaysAgo = new Date(currentDateObj);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    
+    return weightData.filter(item => {
+        const itemDate = new Date(item.date);
+        return itemDate >= sevenDaysAgo && item.date < currentDate;
+    }).map(item => ({
+        date: item.date,
+        weight: item.weight,
+        diet: item.diet,
+        exercise: item.exercise
+    }));
+}
+
+// 更新分析内容显示
+function updateAnalysisContent() {
+    const analysisContainer = document.getElementById('analysis-content');
+    
+    // 如果没有分析数据，显示提示
+    if (Object.keys(analysisData).length === 0) {
+        analysisContainer.innerHTML = '<p class="no-analysis">暂无分析数据</p>';
+        return;
+    }
+    
+    // 清空容器
+    analysisContainer.innerHTML = '';
+    
+    // 获取最近的分析结果（按日期倒序）
+    const sortedDates = Object.keys(analysisData).sort((a, b) => new Date(b) - new Date(a));
+    const latestDate = sortedDates[0];
+    const latestAnalysis = analysisData[latestDate];
+    
+    // 创建分析内容
+    const analysisItem = document.createElement('div');
+    analysisItem.className = 'analysis-item';
+    
+    // 添加日期
+    const dateElement = document.createElement('div');
+    dateElement.className = 'analysis-date';
+    dateElement.textContent = formatDate(latestDate);
+    analysisItem.appendChild(dateElement);
+    
+    // 添加饮食分析
+    if (latestAnalysis.dietAnalysis) {
+        const dietTitle = document.createElement('div');
+        dietTitle.className = 'analysis-title';
+        dietTitle.textContent = '饮食分析:';
+        
+        const dietContent = document.createElement('p');
+        dietContent.textContent = latestAnalysis.dietAnalysis;
+        
+        analysisItem.appendChild(dietTitle);
+        analysisItem.appendChild(dietContent);
+    }
+    
+    // 添加运动分析
+    if (latestAnalysis.exerciseAnalysis) {
+        const exerciseTitle = document.createElement('div');
+        exerciseTitle.className = 'analysis-title';
+        exerciseTitle.textContent = '运动分析:';
+        
+        const exerciseContent = document.createElement('p');
+        exerciseContent.textContent = latestAnalysis.exerciseAnalysis;
+        
+        analysisItem.appendChild(exerciseTitle);
+        analysisItem.appendChild(exerciseContent);
+    }
+    
+    // 添加热量分析
+    if (latestAnalysis.calorieAnalysis) {
+        const calorieTitle = document.createElement('div');
+        calorieTitle.className = 'analysis-title';
+        calorieTitle.textContent = '热量分析:';
+        
+        const calorieContent = document.createElement('p');
+        calorieContent.textContent = latestAnalysis.calorieAnalysis;
+        
+        analysisItem.appendChild(calorieTitle);
+        analysisItem.appendChild(calorieContent);
+    }
+    
+    // 添加建议
+    if (latestAnalysis.suggestions) {
+        const suggestionsTitle = document.createElement('div');
+        suggestionsTitle.className = 'analysis-title';
+        suggestionsTitle.textContent = '建议:';
+        
+        const suggestionsContent = document.createElement('p');
+        suggestionsContent.textContent = latestAnalysis.suggestions;
+        
+        analysisItem.appendChild(suggestionsTitle);
+        analysisItem.appendChild(suggestionsContent);
+    }
+    
+    // 添加到容器
+    analysisContainer.appendChild(analysisItem);
 }
 
 // Function to update the chart
@@ -221,7 +456,7 @@ function updateWeightChange() {
     const currentWeight = lastRecord.weight;
     
     // 定义目标体重
-    const targetWeight = 75;
+    const targetWeight = config.app.targetWeight;
     
     // 创建信息内容
     let message = '';
