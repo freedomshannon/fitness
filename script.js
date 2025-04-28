@@ -2,9 +2,29 @@
 let weightData = [];
 let analysisData = {};
 
+// 确保config对象存在，即使config.js没有正确加载
+if (typeof config === 'undefined') {
+    console.warn('Config not loaded, using default configuration');
+    window.config = {
+        api: {
+            workerProxyUrl: 'https://mingwebdatabase.guba396.workers.dev/',
+            model: "deepseek-v3-241226",
+            temperature: 0.7,
+            maxTokens: 800
+        },
+        cloudflare: {
+            weightDataUrl: 'https://fitnessdatabase.guba396.workers.dev/api/weight-data',
+            analysisDataUrl: 'https://fitnessdatabase.guba396.workers.dev/api/analysis-data'
+        },
+        app: {
+            targetWeight: 75
+        }
+    };
+}
+
 // API URLs from config
-const API_URL = config.cloudflare.weightDataUrl;
-const ANALYSIS_API_URL = config.cloudflare.analysisDataUrl;
+const API_URL = config.cloudflare?.weightDataUrl || 'https://fitnessdatabase.guba396.workers.dev/api/weight-data';
+const ANALYSIS_API_URL = config.cloudflare?.analysisDataUrl || 'https://fitnessdatabase.guba396.workers.dev/api/analysis-data';
 
 document.addEventListener('DOMContentLoaded', function() {
     // Set today's date as default
@@ -193,19 +213,19 @@ ${previousData.map(item => `日期：${formatDate(item.date)}，体重：${item.
 }`;
 
         // 使用Cloudflare Worker作为代理调用AI模型
-        const workerURL = config.api.workerProxyUrl;
+        const workerURL = config.api?.workerProxyUrl || 'https://mingwebdatabase.guba396.workers.dev/';
         
         // 准备发送给模型的数据
         const modelRequest = {
-            model: config.api.model,
+            model: config.api?.model || 'deepseek-v3-241226',
             messages: [
                 {
                     role: "user",
                     content: prompt
                 }
             ],
-            temperature: config.api.temperature,
-            max_tokens: config.api.maxTokens
+            temperature: config.api?.temperature || 0.7,
+            max_tokens: config.api?.maxTokens || 800
         };
         
         console.log('发送请求到Worker代理...');
