@@ -487,41 +487,95 @@ async function callModelAPI(weightData) {
         prompt += "4. 个性化的健康建议\n\n";
         prompt += "要求分析详细专业但通俗易懂，直接给出分析结果，不要输出思考过程。";
         
-        // 使用代理API进行调用
-        const response = await fetch('https://mingwebdatabase.guba396.workers.dev/api/analyze', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            body: JSON.stringify({
-                prompt: prompt
-            })
-        });
+        // 设置重试次数和延迟
+        const maxRetries = 3;
+        const retryDelay = 1000; // 1秒
         
-        if (!response.ok) {
-            console.error('API请求失败，状态码:', response.status);
-            throw new Error('API请求失败');
+        // 重试逻辑
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                console.log(`尝试API调用 (${attempt}/${maxRetries})...`);
+                
+                // 使用代理API进行调用 - 尝试不同的端点格式
+                let response;
+                
+                if (attempt === 1) {
+                    // 第一次尝试 /api/analyze
+                    response = await fetch('https://mingwebdatabase.guba396.workers.dev/api/analyze', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            prompt: prompt
+                        })
+                    });
+                } else if (attempt === 2) {
+                    // 第二次尝试使用根路径
+                    response = await fetch('https://mingwebdatabase.guba396.workers.dev', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            prompt: prompt
+                        })
+                    });
+                } else {
+                    // 第三次尝试使用GET请求
+                    const encodedPrompt = encodeURIComponent(prompt);
+                    response = await fetch(`https://mingwebdatabase.guba396.workers.dev/api/analyze?prompt=${encodedPrompt}`, {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    });
+                }
+                
+                if (!response.ok) {
+                    const status = response.status;
+                    console.error(`API请求失败，状态码: ${status}，尝试次数: ${attempt}/${maxRetries}`);
+                    
+                    if (attempt === maxRetries) {
+                        throw new Error(`API请求失败，状态码: ${status}`);
+                    }
+                    
+                    // 等待一段时间后重试
+                    await new Promise(resolve => setTimeout(resolve, retryDelay));
+                    continue;
+                }
+                
+                const data = await response.json();
+                console.log('API响应:', data);
+                
+                // 从响应中获取大模型生成的分析结果
+                const analysis = data.analysis || data.content || data.result || data.response || '';
+                
+                if (!analysis) {
+                    console.error('API返回的分析结果为空');
+                    throw new Error('分析结果为空');
+                }
+                
+                // 将大模型分析结果格式化为HTML
+                let analysisHTML = formatModelAnalysis(analysis);
+                
+                // 保存到localStorage
+                localStorage.setItem('model-diet-exercise-analysis', analysisHTML);
+                
+                return analysisHTML;
+            } catch (retryError) {
+                if (attempt === maxRetries) {
+                    throw retryError;
+                }
+                console.error(`第${attempt}次尝试失败:`, retryError);
+                // 等待一段时间后重试
+                await new Promise(resolve => setTimeout(resolve, retryDelay));
+            }
         }
         
-        const data = await response.json();
-        console.log('API响应:', data);
-        
-        // 从响应中获取大模型生成的分析结果
-        const analysis = data.analysis || data.content || data.result || '';
-        
-        if (!analysis) {
-            console.error('API返回的分析结果为空');
-            throw new Error('分析结果为空');
-        }
-        
-        // 将大模型分析结果格式化为HTML
-        let analysisHTML = formatModelAnalysis(analysis);
-        
-        // 保存到localStorage
-        localStorage.setItem('model-diet-exercise-analysis', analysisHTML);
-        
-        return analysisHTML;
+        throw new Error('所有API请求尝试均失败');
     } catch (error) {
         console.error('调用大模型API失败:', error);
         return null; // 失败时返回null而不是抛出异常
