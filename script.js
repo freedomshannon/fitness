@@ -192,109 +192,100 @@ ${previousData.map(item => `日期：${formatDate(item.date)}，体重：${item.
     "suggestions": "改进建议内容..."
 }`;
 
-        // 调用OpenRouter API，只使用安全的ASCII字符作为头部
+        // 调用OpenRouter API
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${config.openRouter.apiKey}`,
+                "HTTP-Referer": encodeURI(window.location.origin),
+                "X-Title": "Weight Tracker App"  // 使用英文标题避免编码问题
+            },
+            body: JSON.stringify({
+                model: config.openRouter.model,
+                messages: [
+                    {
+                        role: "user",
+                        content: prompt
+                    }
+                ]
+            })
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('API响应错误:', errorData);
+            throw new Error(`Failed to generate analysis: ${response.status} ${response.statusText}`);
+        }
+        
+        const responseData = await response.json();
+        console.log('API响应成功:', responseData);
+        let analysisResult;
+        
         try {
-            const apiKey = config.openRouter.apiKey;
-            const modelName = config.openRouter.model;
+            // 尝试解析JSON响应
+            const content = responseData.choices[0].message.content;
+            console.log('大模型返回内容:', content);
             
-            // 完全避免使用可能包含非ASCII字符的头字段
-            const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-                method: "POST",
+            // 查找JSON内容（可能被包含在代码块内）
+            const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || 
+                             content.match(/```\s*([\s\S]*?)\s*```/) ||
+                             content.match(/{[\s\S]*?}/);
+                             
+            if (jsonMatch) {
+                analysisResult = JSON.parse(jsonMatch[1] || jsonMatch[0]);
+            } else {
+                // 如果无法解析为JSON，则创建一个简单的结果
+                analysisResult = {
+                    dietAnalysis: "无法生成饮食分析。",
+                    exerciseAnalysis: "无法生成运动分析。",
+                    calorieAnalysis: "无法生成热量分析。",
+                    suggestions: "请稍后再试。"
+                };
+            }
+        } catch (parseError) {
+            console.error('Error parsing model response:', parseError);
+            // 创建一个默认的分析结果
+            analysisResult = {
+                dietAnalysis: "饮食分析生成失败，请稍后再试。",
+                exerciseAnalysis: "运动分析生成失败，请稍后再试。",
+                calorieAnalysis: "热量分析生成失败，请稍后再试。",
+                suggestions: "系统暂时无法提供有效建议，请稍后再试。"
+            };
+        }
+        
+        console.log('分析结果:', analysisResult);
+        
+        // 存储分析结果
+        analysisData[date] = analysisResult;
+        
+        // 存储到本地作为备份
+        localStorage.setItem('analysisData', JSON.stringify(analysisData));
+        
+        // 将分析结果保存到云端
+        try {
+            const saveResponse = await fetch(ANALYSIS_API_URL, {
+                method: 'POST',
                 headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${apiKey}`
-                    // 移除其他可能导致问题的头部字段
+                    'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    model: modelName,
-                    messages: [
-                        {
-                            role: "user",
-                            content: prompt
-                        }
-                    ]
+                    date: date,
+                    ...analysisResult
                 })
             });
             
-            if (!response.ok) {
-                const errorData = await response.json();
-                console.error('API响应错误:', errorData);
-                throw new Error(`Failed to generate analysis: ${response.status} ${response.statusText}`);
+            if (!saveResponse.ok) {
+                console.error('保存分析到云端失败:', await saveResponse.json());
+            } else {
+                console.log('分析数据已保存到云端');
             }
-            
-            const responseData = await response.json();
-            console.log('API响应成功:', responseData);
-            let analysisResult;
-            
-            try {
-                // 尝试解析JSON响应
-                const content = responseData.choices[0].message.content;
-                console.log('大模型返回内容:', content);
-                
-                // 查找JSON内容（可能被包含在代码块内）
-                const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || 
-                                content.match(/```\s*([\s\S]*?)\s*```/) ||
-                                content.match(/{[\s\S]*?}/);
-                                
-                if (jsonMatch) {
-                    analysisResult = JSON.parse(jsonMatch[1] || jsonMatch[0]);
-                } else {
-                    // 如果无法解析为JSON，则创建一个简单的结果
-                    analysisResult = {
-                        dietAnalysis: "无法生成饮食分析。",
-                        exerciseAnalysis: "无法生成运动分析。",
-                        calorieAnalysis: "无法生成热量分析。",
-                        suggestions: "请稍后再试。"
-                    };
-                }
-            } catch (parseError) {
-                console.error('Error parsing model response:', parseError);
-                // 创建一个默认的分析结果
-                analysisResult = {
-                    dietAnalysis: "饮食分析生成失败，请稍后再试。",
-                    exerciseAnalysis: "运动分析生成失败，请稍后再试。",
-                    calorieAnalysis: "热量分析生成失败，请稍后再试。",
-                    suggestions: "系统暂时无法提供有效建议，请稍后再试。"
-                };
-            }
-            
-            console.log('分析结果:', analysisResult);
-            
-            // 存储分析结果
-            analysisData[date] = analysisResult;
-            
-            // 存储到本地作为备份
-            localStorage.setItem('analysisData', JSON.stringify(analysisData));
-            
-            // 将分析结果保存到云端
-            try {
-                const saveResponse = await fetch(ANALYSIS_API_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        date: date,
-                        ...analysisResult
-                    })
-                });
-                
-                if (!saveResponse.ok) {
-                    console.error('保存分析到云端失败:', await saveResponse.json());
-                } else {
-                    console.log('分析数据已保存到云端');
-                }
-            } catch (saveError) {
-                console.error('保存分析数据出错:', saveError);
-            }
-            
-            // 更新UI显示
-            updateAnalysisContent();
-            
-        } catch (fetchError) {
-            console.error('Fetch 错误:', fetchError);
-            throw fetchError;
+        } catch (saveError) {
+            console.error('保存分析数据出错:', saveError);
         }
+        
+        // 更新UI显示
+        updateAnalysisContent();
         
     } catch (error) {
         console.error('Error generating analysis:', error);
