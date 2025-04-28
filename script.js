@@ -487,16 +487,16 @@ async function callModelAPI(weightData) {
         prompt += "4. 个性化的健康建议\n\n";
         prompt += "要求分析详细专业但通俗易懂，直接给出分析结果，不要输出思考过程。";
         
-        // 编码prompt参数
-        const encodedPrompt = encodeURIComponent(prompt);
-        const url = `https://mingwebdatabase.guba396.workers.dev?prompt=${encodedPrompt}`;
-        
-        // 使用代理API进行调用，改用GET方法
-        const response = await fetch(url, {
-            method: 'GET',
+        // 使用代理API进行调用
+        const response = await fetch('https://mingwebdatabase.guba396.workers.dev/api/analyze', {
+            method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
-            }
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+                prompt: prompt
+            })
         });
         
         if (!response.ok) {
