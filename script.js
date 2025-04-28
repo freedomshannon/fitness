@@ -216,33 +216,65 @@ function updateWeightChange() {
         return;
     }
     
-    if (weightData.length === 1) {
-        weightChangeElement.textContent = `初始体重记录: ${weightData[0].weight} kg`;
-        return;
+    // 获取最新记录的体重数据
+    const lastRecord = weightData[weightData.length - 1];
+    const currentWeight = lastRecord.weight;
+    
+    // 定义目标体重
+    const targetWeight = 75;
+    
+    // 创建信息内容
+    let message = '';
+    
+    // 第一行：显示当前体重
+    message += `当前体重: ${currentWeight} kg\n`;
+    
+    // 第二行：比较与上次记录的差异
+    if (weightData.length > 1) {
+        const prevRecord = weightData[weightData.length - 2];
+        const difference = currentWeight - prevRecord.weight;
+        const formattedDiff = Math.abs(difference).toFixed(1);
+        
+        if (difference < 0) {
+            message += `比上次减少了 ${formattedDiff} kg! 🎉\n`;
+        } else if (difference > 0) {
+            message += `比上次增加了 ${formattedDiff} kg\n`;
+        } else {
+            message += `与上次持平\n`;
+        }
+    } else {
+        message += `初始体重记录\n`;
     }
     
-    // Get last two records
-    const lastRecord = weightData[weightData.length - 1];
-    const prevRecord = weightData[weightData.length - 2];
-    
-    // Calculate difference
-    const difference = lastRecord.weight - prevRecord.weight;
-    const formattedDiff = Math.abs(difference).toFixed(1);
-    
-    // Create message based on change
-    let message;
-    if (difference < 0) {
-        message = `最新体重比上次减少了 ${formattedDiff} kg! 🎉`;
-        weightChangeElement.style.color = 'green';
-    } else if (difference > 0) {
-        message = `最新体重比上次增加了 ${formattedDiff} kg`;
-        weightChangeElement.style.color = 'red';
+    // 第三行：距离目标还有多少
+    if (currentWeight > targetWeight) {
+        const toGoKg = (currentWeight - targetWeight).toFixed(1);
+        const percentToGo = (((currentWeight - targetWeight) / targetWeight) * 100).toFixed(1);
+        message += `距离目标体重(${targetWeight}kg)还有 ${toGoKg} kg (${percentToGo}%)`;
+    } else if (currentWeight < targetWeight) {
+        const belowTarget = (targetWeight - currentWeight).toFixed(1);
+        message += `已低于目标体重(${targetWeight}kg) ${belowTarget} kg`;
     } else {
-        message = `最新体重与上次持平`;
+        message += `恭喜！已达到目标体重(${targetWeight}kg) 🎊`;
+    }
+    
+    // 设置显示样式
+    weightChangeElement.style.whiteSpace = 'pre-line'; // 保留换行符
+    weightChangeElement.textContent = message;
+    
+    // 设置文字颜色
+    if (weightData.length > 1) {
+        const difference = currentWeight - weightData[weightData.length - 2].weight;
+        if (difference < 0) {
+            weightChangeElement.style.color = 'green';
+        } else if (difference > 0) {
+            weightChangeElement.style.color = 'red';
+        } else {
+            weightChangeElement.style.color = '#333';
+        }
+    } else {
         weightChangeElement.style.color = '#333';
     }
-    
-    weightChangeElement.textContent = message;
 }
 
 // Function to update history list
