@@ -1,261 +1,313 @@
-document.addEventListener('DOMContentLoaded', () => {
-    const form = document.getElementById('entry-form');
-    const dateInput = document.getElementById('date');
-    const weightInput = document.getElementById('weight');
-    const exerciseInput = document.getElementById('exercise');
-    const dietInput = document.getElementById('diet');
-    const submitStatus = document.getElementById('submit-status');
-    const weightChangeInfo = document.getElementById('weight-change-info');
-    const historyLog = document.getElementById('history-log');
-    const ctx = document.getElementById('weightChart').getContext('2d');
+// Initialize variables for tracking data
+let weightData = [];
 
-    let weightChart;
-    let allData = []; // To store fetched data
+// API URL - 替换为你的Cloudflare Worker URL
+const API_URL = 'https://weight-tracker-api.your-username.workers.dev/api/weight-data';
 
-    // --- Chart Initialization --- //
-    function initializeChart() {
-        if (weightChart) {
-            weightChart.destroy(); // Destroy previous instance if exists
+document.addEventListener('DOMContentLoaded', function() {
+    // Set today's date as default
+    const today = new Date();
+    const formattedDate = today.toISOString().split('T')[0];
+    document.getElementById('date').value = formattedDate;
+    
+    // Load data from Cloudflare KV
+    loadData();
+    
+    // Setup form submission
+    const form = document.getElementById('weight-form');
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        saveData();
+    });
+});
+
+// Function to load data from Cloudflare KV
+async function loadData() {
+    try {
+        const response = await fetch(API_URL);
+        if (!response.ok) {
+            throw new Error('Failed to fetch data');
         }
-        weightChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: [], // Dates will go here
-                datasets: [{
-                    label: '体重 (kg)',
-                    data: [], // Weights will go here
-                    borderColor: '#0077cc', // Soft blue line
-                    backgroundColor: 'rgba(0, 119, 204, 0.1)', // Light blue fill
-                    borderWidth: 3,
-                    tension: 0.1, // Slightly curved lines
-                    pointBackgroundColor: '#ffcc00', // Vibrant yellow points
-                    pointBorderColor: '#e6b800',
-                    pointRadius: 5,
-                    pointHoverRadius: 8
-                }]
+        const data = await response.json();
+        weightData = data || [];
+        updateChart();
+        updateWeightChange();
+        updateHistoryList();
+    } catch (error) {
+        console.error('Error loading data:', error);
+        // Fallback to localStorage if API fails
+        const savedData = localStorage.getItem('weightData');
+        if (savedData) {
+            weightData = JSON.parse(savedData);
+            updateChart();
+            updateWeightChange();
+            updateHistoryList();
+        }
+    }
+}
+
+// Function to save data to Cloudflare KV
+async function saveData() {
+    const date = document.getElementById('date').value;
+    const weight = parseFloat(document.getElementById('weight').value);
+    const exercise = document.getElementById('exercise').value;
+    const diet = document.getElementById('diet').value;
+    
+    // Basic validation
+    if (!date || !weight) {
+        alert('请输入日期和体重!');
+        return;
+    }
+    
+    // Check if we already have data for this date
+    const existingIndex = weightData.findIndex(item => item.date === date);
+    
+    if (existingIndex >= 0) {
+        // Update existing data
+        weightData[existingIndex] = { date, weight, exercise, diet };
+    } else {
+        // Add new data and sort by date
+        weightData.push({ date, weight, exercise, diet });
+        weightData.sort((a, b) => new Date(a.date) - new Date(b.date));
+    }
+    
+    try {
+        // Save to Cloudflare KV
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
             },
-            options: {
-                scales: {
-                    y: {
-                        beginAtZero: false, // Don't force scale to start at 0
-                        title: {
-                            display: true,
-                            text: '体重 (kg)',
-                            font: {
-                                family: 'Kalam',
-                                size: 14
-                            }
+            body: JSON.stringify(weightData)
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to save data');
+        }
+        
+        // Fallback: also save to localStorage as backup
+        localStorage.setItem('weightData', JSON.stringify(weightData));
+        
+        // Update UI
+        updateChart();
+        updateWeightChange();
+        updateHistoryList();
+        
+        // Show success message with wobble animation
+        const btn = document.querySelector('.btn');
+        btn.textContent = '保存成功!';
+        btn.style.backgroundColor = '#4CAF50';
+        
+        // Reset form fields except date
+        document.getElementById('weight').value = '';
+        document.getElementById('exercise').value = '';
+        document.getElementById('diet').value = '';
+        
+        // Reset button text after 2 seconds
+        setTimeout(() => {
+            btn.textContent = '保存数据';
+            btn.style.backgroundColor = '';
+        }, 2000);
+        
+    } catch (error) {
+        console.error('Error saving data:', error);
+        alert('保存失败，请稍后再试');
+    }
+}
+
+// Function to update the chart
+function updateChart() {
+    const ctx = document.getElementById('weightChart').getContext('2d');
+    
+    // Extract dates and weights for chart
+    const labels = weightData.map(item => formatDate(item.date));
+    const data = weightData.map(item => item.weight);
+    
+    // Check if chart already exists and destroy it
+    if (window.weightChart instanceof Chart) {
+        window.weightChart.destroy();
+    }
+    
+    // Create new chart
+    window.weightChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: '体重 (kg)',
+                data: data,
+                borderColor: '#5b8fb9',
+                backgroundColor: 'rgba(91, 143, 185, 0.2)',
+                borderWidth: 3,
+                pointBackgroundColor: '#ffa41b',
+                pointBorderColor: '#fff',
+                pointRadius: 6,
+                pointHoverRadius: 8,
+                tension: 0.2,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top',
+                    labels: {
+                        font: {
+                            family: "'Comic Neue', cursive",
+                            size: 14
+                        }
+                    }
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    callbacks: {
+                        label: function(context) {
+                            return `体重: ${context.parsed.y} kg`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    ticks: {
+                        font: {
+                            family: "'Comic Neue', cursive"
                         }
                     },
-                    x: {
-                        title: {
-                            display: true,
-                            text: '日期',
-                            font: {
-                                family: 'Kalam',
-                                size: 14
-                            }
-                        }
+                    grid: {
+                        display: true,
+                        drawBorder: true,
+                        drawOnChartArea: true,
+                        drawTicks: true,
+                        color: '#e0e0e0',
+                        borderDash: [5, 5]
                     }
                 },
-                plugins: {
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                let label = context.dataset.label || '';
-                                if (label) {
-                                    label += ': ';
-                                }
-                                if (context.parsed.y !== null) {
-                                    label += context.parsed.y + ' kg';
-                                }
-                                return label;
-                            }
+                y: {
+                    beginAtZero: false,
+                    ticks: {
+                        font: {
+                            family: "'Comic Neue', cursive"
                         }
+                    },
+                    grid: {
+                        display: true,
+                        drawBorder: true,
+                        drawOnChartArea: true,
+                        drawTicks: true,
+                        color: '#e0e0e0',
+                        borderDash: [5, 5]
                     }
-                },
-                 responsive: true,
-                 maintainAspectRatio: true
-            }
-        });
-    }
-
-    // --- Set Default Date --- //
-    function setDefaultDate() {
-        const today = new Date();
-        // Format as YYYY-MM-DD
-        const year = today.getFullYear();
-        const month = String(today.getMonth() + 1).padStart(2, '0');
-        const day = String(today.getDate()).padStart(2, '0');
-        dateInput.value = `${year}-${month}-${day}`;
-    }
-
-    // --- Display Status Message --- //
-    function showStatus(message, isError = false) {
-        submitStatus.textContent = message;
-        submitStatus.className = `status-message ${isError ? 'error' : 'success'}`;
-        // Clear message after a few seconds
-        setTimeout(() => {
-            submitStatus.textContent = '';
-            submitStatus.className = 'status-message';
-        }, 5000);
-    }
-
-    // --- Update UI (Chart, Analysis, History) --- //
-    function updateUI(data) {
-        // Sort data by date in ascending order
-        data.sort((a, b) => new Date(a.date) - new Date(b.date));
-        allData = data; // Store sorted data
-
-        // 1. Update Chart
-        const labels = data.map(entry => entry.date);
-        const weights = data.map(entry => entry.weight);
-        weightChart.data.labels = labels;
-        weightChart.data.datasets[0].data = weights;
-        weightChart.update();
-
-        // 2. Calculate and Display Weight Change
-        if (data.length === 0) {
-            weightChangeInfo.textContent = '暂无数据，请开始记录！';
-        } else if (data.length === 1) {
-            weightChangeInfo.textContent = `初始体重记录: ${data[0].weight} kg`;
-        } else {
-            const latestWeight = parseFloat(data[data.length - 1].weight);
-            const previousWeight = parseFloat(data[data.length - 2].weight);
-            const change = (latestWeight - previousWeight).toFixed(1);
-
-            if (change > 0) {
-                weightChangeInfo.textContent = `今日 (${data[data.length - 1].date}) 体重比上次 (${data[data.length - 2].date}) 增加 ${change} 公斤`;
-                weightChangeInfo.style.color = '#dc3545'; // Red for increase
-            } else if (change < 0) {
-                weightChangeInfo.textContent = `今日 (${data[data.length - 1].date}) 体重比上次 (${data[data.length - 2].date}) 减少 ${Math.abs(change)} 公斤`;
-                weightChangeInfo.style.color = '#28a745'; // Green for decrease
-            } else {
-                weightChangeInfo.textContent = `今日 (${data[data.length - 1].date}) 体重与上次 (${data[data.length - 2].date}) 持平`;
-                weightChangeInfo.style.color = '#0077cc'; // Blue for same
+                }
             }
         }
+    });
+}
 
-        // 3. Update History Log
-        historyLog.innerHTML = ''; // Clear previous entries
-        if (data.length === 0) {
-            historyLog.innerHTML = '<p>暂无历史记录。</p>';
-        } else {
-            // Display in reverse chronological order (newest first)
-            data.slice().reverse().forEach(entry => {
-                const entryDiv = document.createElement('div');
-                entryDiv.className = 'history-entry';
-                entryDiv.innerHTML = `
-                    <h3>${entry.date} - <strong>${entry.weight} kg</strong></h3>
-                    ${entry.exercise ? `<p><strong>运动:</strong> ${entry.exercise}</p>` : ''}
-                    ${entry.diet ? `<p><strong>饮食:</strong> ${entry.diet}</p>` : ''}
-                `;
-                historyLog.appendChild(entryDiv);
-            });
-        }
+// Function to update weight change information
+function updateWeightChange() {
+    const weightChangeElement = document.getElementById('weight-change');
+    
+    if (weightData.length === 0) {
+        weightChangeElement.textContent = '还没有记录数据';
+        return;
     }
-
-    // --- Fetch Data from Backend --- //
-    async function fetchData() {
-        weightChangeInfo.textContent = '正在加载数据...';
-        weightChangeInfo.style.color = '#0077cc'; // Default blue
-        try {
-            const response = await fetch('/api/data');
-            if (!response.ok) {
-                 // Try to get error message from backend, otherwise use default
-                 let errorMsg = `HTTP error! status: ${response.status}`;
-                 try {
-                     const errorData = await response.json();
-                     errorMsg = errorData.message || errorMsg;
-                 } catch (jsonError) {
-                     // Ignore if response is not JSON
-                 }
-                 throw new Error(errorMsg);
-             }
-            const data = await response.json();
-
-            updateUI(data);
-            if(data.length === 0) {
-                 weightChangeInfo.textContent = '暂无数据，请开始记录！';
-            }
-
-        } catch (error) {
-            console.error('Error fetching data:', error);
-            weightChangeInfo.textContent = '加载数据失败';
-             weightChangeInfo.style.color = '#dc3545'; // Red
-            showStatus(`加载数据失败: ${error.message}`, true);
-             updateUI([]); // Show empty state
-        }
+    
+    if (weightData.length === 1) {
+        weightChangeElement.textContent = `初始体重记录: ${weightData[0].weight} kg`;
+        return;
     }
-
-    // --- Handle Form Submission --- //
-    async function handleFormSubmit(event) {
-        event.preventDefault(); // Prevent default page reload
-
-        const entry = {
-            date: dateInput.value,
-            // Ensure weight is a string with one decimal place for consistency before sending
-            weight: parseFloat(weightInput.value).toFixed(1),
-            exercise: exerciseInput.value.trim(),
-            diet: dietInput.value.trim()
-        };
-
-        // Re-validate weight as number for checking > 0
-        const weightNum = parseFloat(entry.weight);
-        if (!entry.date || isNaN(weightNum) || weightNum <= 0) {
-            showStatus('请确保日期和体重填写正确 (体重需大于 0)。', true);
-            return;
-        }
-
-        submitStatus.textContent = '正在保存...';
-        submitStatus.className = 'status-message';
-
-        try {
-            const response = await fetch('/api/data', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(entry),
-            });
-
-            if (!response.ok) {
-                 // Try to get error message from backend, otherwise use default
-                 let errorMsg = `HTTP error! status: ${response.status}`;
-                 try {
-                     const errorData = await response.json();
-                     errorMsg = errorData.message || errorMsg;
-                 } catch (jsonError) {
-                     // Ignore if response is not JSON
-                 }
-                 throw new Error(errorMsg);
-             }
-
-            // const result = await response.json(); // Contains { message: ..., entry: ... }
-            // console.log('Save result:', result);
-
-            showStatus('记录已保存！', false);
-
-            // Fetch data again to update the chart and history
-            await fetchData();
-
-            // Clear fields after successful submission
-            weightInput.value = '';
-            exerciseInput.value = '';
-            dietInput.value = '';
-            // Set date back to today
-            setDefaultDate();
-
-        } catch (error) {
-            console.error('Error saving data:', error);
-            showStatus(`保存失败: ${error.message || '请检查网络连接或稍后重试'}`, true);
-        }
+    
+    // Get last two records
+    const lastRecord = weightData[weightData.length - 1];
+    const prevRecord = weightData[weightData.length - 2];
+    
+    // Calculate difference
+    const difference = lastRecord.weight - prevRecord.weight;
+    const formattedDiff = Math.abs(difference).toFixed(1);
+    
+    // Create message based on change
+    let message;
+    if (difference < 0) {
+        message = `最新体重比上次减少了 ${formattedDiff} kg! 🎉`;
+        weightChangeElement.style.color = 'green';
+    } else if (difference > 0) {
+        message = `最新体重比上次增加了 ${formattedDiff} kg`;
+        weightChangeElement.style.color = 'red';
+    } else {
+        message = `最新体重与上次持平`;
+        weightChangeElement.style.color = '#333';
     }
+    
+    weightChangeElement.textContent = message;
+}
 
-    // --- Initial Setup --- //
-    setDefaultDate();
-    initializeChart();
-    fetchData(); // Load initial data when the page loads
+// Function to update history list
+function updateHistoryList() {
+    const historyList = document.getElementById('history-list');
+    historyList.innerHTML = '';
+    
+    // Create history items in reverse order (newest first)
+    const reversedData = [...weightData].reverse();
+    
+    reversedData.forEach(item => {
+        const historyItem = document.createElement('div');
+        historyItem.className = 'history-item';
+        
+        const dateElement = document.createElement('div');
+        dateElement.className = 'date';
+        dateElement.textContent = formatDate(item.date);
+        
+        const weightElement = document.createElement('div');
+        weightElement.className = 'weight';
+        weightElement.textContent = `体重: ${item.weight} kg`;
+        
+        historyItem.appendChild(dateElement);
+        historyItem.appendChild(weightElement);
+        
+        if (item.exercise) {
+            const exerciseTitle = document.createElement('h4');
+            exerciseTitle.textContent = '运动记录:';
+            
+            const exerciseContent = document.createElement('p');
+            exerciseContent.textContent = item.exercise;
+            
+            historyItem.appendChild(exerciseTitle);
+            historyItem.appendChild(exerciseContent);
+        }
+        
+        if (item.diet) {
+            const dietTitle = document.createElement('h4');
+            dietTitle.textContent = '饮食记录:';
+            
+            const dietContent = document.createElement('p');
+            dietContent.textContent = item.diet;
+            
+            historyItem.appendChild(dietTitle);
+            historyItem.appendChild(dietContent);
+        }
+        
+        historyList.appendChild(historyItem);
+    });
+    
+    // If no data, show message
+    if (weightData.length === 0) {
+        const noDataMessage = document.createElement('p');
+        noDataMessage.textContent = '暂无记录数据';
+        noDataMessage.style.textAlign = 'center';
+        noDataMessage.style.padding = '20px';
+        historyList.appendChild(noDataMessage);
+    }
+}
 
-    form.addEventListener('submit', handleFormSubmit);
-}); 
+// Helper function to format date as YYYY-MM-DD
+function formatDate(dateString) {
+    const date = new Date(dateString);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}年${month}月${day}日`;
+} 
