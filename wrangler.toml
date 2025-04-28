@@ -9,8 +9,8 @@ compatibility_date = "2023-10-30" # Use a recent compatibility date
 # and then uncomment and update the binding here.
 [[kv_namespaces]]
 binding = "WEIGHT_LOG_KV"
-id = "YOUR_KV_NAMESPACE_ID" # Replace with your actual KV namespace ID
-# preview_id = "YOUR_PREVIEW_KV_NAMESPACE_ID" # Optional: For wrangler dev
+id = "YOUR_KV_NAMESPACE_ID" # 请替换为您从Cloudflare Dashboard获取的实际KV命名空间ID
+# preview_id = "2517315f6464485c8d1ed849372f8585" # Optional: For wrangler dev
 
 # If deploying as a Pages Function (recommended for this setup)
 # No explicit [site] section is needed as Pages handles this.
