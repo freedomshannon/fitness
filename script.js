@@ -249,8 +249,7 @@ function updateWeightChange() {
     // 第三行：距离目标还有多少
     if (currentWeight > targetWeight) {
         const toGoKg = (currentWeight - targetWeight).toFixed(1);
-        const percentToGo = (((currentWeight - targetWeight) / targetWeight) * 100).toFixed(1);
-        message += `距离目标体重(${targetWeight}kg)还有 ${toGoKg} kg (${percentToGo}%)`;
+        message += `距离目标体重(${targetWeight}kg)还有 ${toGoKg} kg`;
     } else if (currentWeight < targetWeight) {
         const belowTarget = (targetWeight - currentWeight).toFixed(1);
         message += `已低于目标体重(${targetWeight}kg) ${belowTarget} kg`;
