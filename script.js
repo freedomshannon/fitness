@@ -2,7 +2,7 @@
 let weightData = [];
 
 // API URL - 替换为你的Cloudflare Worker URL
-const API_URL = 'https://weight-tracker-api.your-username.workers.dev/api/weight-data';
+const API_URL = 'https://fitnessdatabase.guba396.workers.dev/';
 
 document.addEventListener('DOMContentLoaded', function() {
     // Set today's date as default
