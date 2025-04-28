@@ -198,8 +198,8 @@ ${previousData.map(item => `日期：${formatDate(item.date)}，体重：${item.
             headers: {
                 "Content-Type": "application/json",
                 "Authorization": `Bearer ${config.openRouter.apiKey}`,
-                "HTTP-Referer": window.location.origin,
-                "X-Title": config.openRouter.siteTitle
+                "HTTP-Referer": encodeURI(window.location.origin),
+                "X-Title": "Weight Tracker App"  // 使用英文标题避免编码问题
             },
             body: JSON.stringify({
                 model: config.openRouter.model,
