@@ -183,6 +183,78 @@ input:focus, textarea:focus {
     border: 2px dashed var(--primary-color);
 }
 
+.diet-exercise-analysis {
+    margin-top: 25px;
+    padding: 20px;
+    background: #f8f5ff;
+    border-radius: 8px;
+    border: 2px dashed var(--accent-color);
+}
+
+.diet-exercise-analysis h3 {
+    font-family: 'Architects Daughter', cursive;
+    color: var(--primary-color);
+    margin-bottom: 15px;
+    font-size: 1.3rem;
+    position: relative;
+    display: inline-block;
+}
+
+.diet-exercise-analysis h4 {
+    font-family: 'Architects Daughter', cursive;
+    color: var(--accent-color);
+    margin: 18px 0 10px 0;
+    font-size: 1.1rem;
+    position: relative;
+    display: inline-block;
+}
+
+.diet-exercise-analysis h4::after {
+    content: "";
+    display: block;
+    width: 80%;
+    height: 1px;
+    background: var(--accent-color);
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+}
+
+.diet-exercise-analysis h3::after {
+    content: "";
+    display: block;
+    width: 100%;
+    height: 2px;
+    background: var(--accent-color);
+    position: absolute;
+    bottom: -3px;
+    left: 0;
+    transform: skew(-3deg);
+}
+
+.diet-exercise-analysis p {
+    margin-bottom: 12px;
+    line-height: 1.5;
+}
+
+.diet-exercise-analysis ul {
+    margin-left: 20px;
+}
+
+.diet-exercise-analysis li {
+    margin-bottom: 8px;
+    position: relative;
+}
+
+.diet-exercise-analysis li::before {
+    content: "•";
+    color: var(--accent-color);
+    font-weight: bold;
+    display: inline-block;
+    width: 1em;
+    margin-left: -1em;
+}
+
 .history-list {
     max-height: 500px;
     overflow-y: auto;

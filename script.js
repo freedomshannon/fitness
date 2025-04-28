@@ -19,6 +19,49 @@ document.addEventListener('DOMContentLoaded', function() {
         e.preventDefault();
         saveData();
     });
+    
+    // Add styles
+    const style = document.createElement('style');
+    style.textContent = `
+        .small-btn {
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            font-size: 0.9rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: 'Comic Neue', cursive;
+            transition: all 0.2s;
+            margin-top: 15px;
+        }
+        
+        .small-btn:hover {
+            background-color: #ff9100;
+            transform: translateY(-2px);
+        }
+        
+        .analysis-actions {
+            text-align: right;
+            margin-top: 10px;
+        }
+        
+        .loading-spinner {
+            width: 30px;
+            height: 30px;
+            margin: 20px auto;
+            border: 3px solid rgba(91, 143, 185, 0.2);
+            border-radius: 50%;
+            border-top-color: var(--primary-color);
+            animation: spin 1s ease-in-out infinite;
+            display: inline-block;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    `;
+    document.head.appendChild(style);
 });
 
 // Function to load data from Cloudflare KV
@@ -33,6 +76,7 @@ async function loadData() {
         updateChart();
         updateWeightChange();
         updateHistoryList();
+        updateDietExerciseAnalysis();
     } catch (error) {
         console.error('Error loading data:', error);
         // Fallback to localStorage if API fails
@@ -42,6 +86,7 @@ async function loadData() {
             updateChart();
             updateWeightChange();
             updateHistoryList();
+            updateDietExerciseAnalysis();
         }
     }
 }
@@ -92,6 +137,29 @@ async function saveData() {
         updateChart();
         updateWeightChange();
         updateHistoryList();
+        
+        // 如果有饮食或运动记录，调用大模型分析
+        if ((diet && diet.trim() !== '') || (exercise && exercise.trim() !== '')) {
+            const analysisElement = document.getElementById('diet-exercise-analysis');
+            if (analysisElement) {
+                // 显示加载状态
+                analysisElement.innerHTML = '<div class="loading-spinner"></div> <p>正在分析饮食和运动数据...</p>';
+                
+                // 调用大模型分析
+                getModelAnalysis(weightData).then(() => {
+                    // 分析完成后更新UI
+                    updateDietExerciseAnalysis();
+                }).catch(error => {
+                    console.error('大模型分析失败:', error);
+                    // 分析失败后仍然更新UI
+                    updateDietExerciseAnalysis();
+                });
+            } else {
+                updateDietExerciseAnalysis();
+            }
+        } else {
+            updateDietExerciseAnalysis();
+        }
         
         // Show success message with wobble animation
         const btn = document.querySelector('.btn');
@@ -341,4 +409,289 @@ function formatDate(dateString) {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}年${month}月${day}日`;
-} 
+}
+
+// 新增饮食运动分析函数
+function updateDietExerciseAnalysis() {
+    const analysisElement = document.getElementById('diet-exercise-analysis');
+    
+    if (!analysisElement || weightData.length === 0) {
+        return; // 如果元素不存在或没有数据，直接返回
+    }
+    
+    // 检查是否已有大模型分析结果
+    const modelAnalysis = localStorage.getItem('model-diet-exercise-analysis');
+    
+    if (modelAnalysis) {
+        // 如果有大模型分析结果，直接显示
+        analysisElement.innerHTML = modelAnalysis;
+        return;
+    }
+    
+    // 创建分析内容
+    let analysisContent = '';
+    
+    // 获取最近7天的记录
+    const recentRecords = [...weightData].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 7);
+    
+    // 分析运动情况
+    let exerciseCount = 0;
+    let exercisePattern = '';
+    
+    recentRecords.forEach(record => {
+        if (record.exercise && record.exercise.trim() !== '') {
+            exerciseCount++;
+        }
+    });
+    
+    const exerciseRate = recentRecords.length > 0 ? (exerciseCount / recentRecords.length * 100).toFixed(0) : 0;
+    
+    if (exerciseRate >= 80) {
+        exercisePattern = '运动习惯非常好！保持这种状态 💪';
+    } else if (exerciseRate >= 50) {
+        exercisePattern = '运动习惯良好，可以再提高一些频率';
+    } else if (exerciseRate >= 30) {
+        exercisePattern = '运动频率偏低，建议增加运动次数';
+    } else {
+        exercisePattern = '需要增加更多运动来促进健康';
+    }
+    
+    // 分析饮食情况
+    let dietCount = 0;
+    let dietPattern = '';
+    
+    recentRecords.forEach(record => {
+        if (record.diet && record.diet.trim() !== '') {
+            dietCount++;
+        }
+    });
+    
+    const dietRate = recentRecords.length > 0 ? (dietCount / recentRecords.length * 100).toFixed(0) : 0;
+    
+    if (dietRate >= 80) {
+        dietPattern = '饮食记录非常规律，有助于健康管理 🥗';
+    } else if (dietRate >= 50) {
+        dietPattern = '饮食记录习惯良好，继续保持';
+    } else if (dietRate >= 30) {
+        dietPattern = '饮食记录偏少，建议增加记录频率';
+    } else {
+        dietPattern = '需要更规律地记录饮食情况';
+    }
+    
+    // 分析体重变化与饮食运动的关系
+    let weightTrend = '暂无明显趋势';
+    
+    if (recentRecords.length >= 3) {
+        const oldestWeight = recentRecords[recentRecords.length - 1].weight;
+        const newestWeight = recentRecords[0].weight;
+        const weightDiff = newestWeight - oldestWeight;
+        
+        if (weightDiff < -0.5) {
+            weightTrend = `近期体重呈下降趋势，减少了${Math.abs(weightDiff).toFixed(1)}kg`;
+            if (exerciseRate > 50) {
+                weightTrend += '，可能与规律运动有关';
+            }
+            if (dietRate > 50) {
+                weightTrend += '，健康的饮食习惯正在发挥作用';
+            }
+        } else if (weightDiff > 0.5) {
+            weightTrend = `近期体重呈上升趋势，增加了${weightDiff.toFixed(1)}kg`;
+            if (exerciseRate < 30) {
+                weightTrend += '，可能与运动较少有关';
+            }
+            if (dietRate < 30) {
+                weightTrend += '，建议更注意饮食控制';
+            }
+        } else {
+            weightTrend = '近期体重保持稳定';
+        }
+    }
+    
+    // 组合分析内容
+    analysisContent += `<h3>近期健康分析</h3>`;
+    analysisContent += `<p><strong>运动情况：</strong>${exercisePattern} (${exerciseRate}%)</p>`;
+    analysisContent += `<p><strong>饮食记录：</strong>${dietPattern} (${dietRate}%)</p>`;
+    analysisContent += `<p><strong>体重趋势：</strong>${weightTrend}</p>`;
+    
+    // 添加建议
+    analysisContent += `<h3>健康建议</h3>`;
+    let suggestions = '<ul>';
+    
+    if (exerciseRate < 50) {
+        suggestions += '<li>尝试增加运动频率，每天至少30分钟中等强度活动</li>';
+    }
+    
+    if (dietRate < 50) {
+        suggestions += '<li>规律记录饮食有助于发现饮食模式，建议每日记录</li>';
+    }
+    
+    // 一些通用建议
+    suggestions += '<li>保持足够的水分摄入，每天至少1.5-2升水</li>';
+    suggestions += '<li>确保充足的睡眠，每晚7-8小时</li>';
+    
+    if (recentRecords.length < 3) {
+        suggestions += '<li>持续记录数据，至少连续记录一周，以便获得更准确的分析</li>';
+    }
+    
+    suggestions += '</ul>';
+    analysisContent += suggestions;
+    
+    // 设置HTML内容
+    analysisElement.innerHTML = analysisContent;
+}
+
+// 大模型分析饮食和运动数据
+async function getModelAnalysis(weightData) {
+    try {
+        // 获取最近7天的记录
+        const recentRecords = [...weightData].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 7);
+        
+        // 如果记录少于2条，不进行API调用
+        if (recentRecords.length < 2) {
+            console.log('记录不足，无法进行分析');
+            return;
+        }
+        
+        // 构建提示词
+        const prompt = buildAnalysisPrompt(recentRecords);
+        
+        // 尝试直接使用Cloudflare Worker的API URL
+        const MODEL_API_URL = API_URL.replace('/weight-data', '/model-analysis');
+        console.log('调用分析API:', MODEL_API_URL);
+        
+        // 通过API发送请求
+        const response = await fetch(MODEL_API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                prompt: prompt
+            })
+        });
+        
+        // 如果服务器返回错误，使用默认分析
+        if (!response.ok) {
+            console.error('API请求失败，状态码:', response.status);
+            return;
+        }
+        
+        const data = await response.json();
+        
+        // 如果返回数据格式不正确，使用默认分析
+        if (!data.analysis) {
+            console.error('API返回数据格式不正确:', data);
+            return;
+        }
+        
+        // 获取AI分析
+        let aiAnalysis = data.analysis;
+        console.log('获取到AI分析结果');
+        
+        // 将AI分析格式化为HTML
+        let formattedAnalysis = formatModelAnalysis(aiAnalysis);
+        
+        // 保存到localStorage
+        localStorage.setItem('model-diet-exercise-analysis', formattedAnalysis);
+        
+    } catch (error) {
+        console.error('API调用失败:', error);
+    }
+}
+
+// 构建分析提示词
+function buildAnalysisPrompt(records) {
+    let prompt = "请分析以下健康记录数据，并提供饮食和运动方面的建议：\n\n";
+    
+    records.forEach(record => {
+        prompt += `日期: ${formatDate(record.date)}\n`;
+        prompt += `体重: ${record.weight} kg\n`;
+        
+        if (record.exercise && record.exercise.trim() !== '') {
+            prompt += `运动记录: ${record.exercise}\n`;
+        } else {
+            prompt += "运动记录: 无\n";
+        }
+        
+        if (record.diet && record.diet.trim() !== '') {
+            prompt += `饮食记录: ${record.diet}\n`;
+        } else {
+            prompt += "饮食记录: 无\n";
+        }
+        
+        prompt += "\n";
+    });
+    
+    prompt += "请从以下几个方面分析：\n";
+    prompt += "1. 饮食模式分析及改进建议\n";
+    prompt += "2. 运动习惯分析及改进建议\n";
+    prompt += "3. 体重变化趋势与饮食运动的关系\n";
+    prompt += "4. 个性化的健康建议\n\n";
+    prompt += "要求分析详细专业但通俗易懂，直接给出分析结果，不要输出思考过程。";
+    
+    return prompt;
+}
+
+// 格式化大模型分析结果为HTML
+function formatModelAnalysis(analysis) {
+    if (!analysis) return '';
+    
+    // 替换换行符为HTML段落
+    let html = '<h3>智能健康分析</h3>';
+    
+    // 分割文本为段落
+    const paragraphs = analysis.split(/\n\s*\n/);
+    
+    // 处理每个段落
+    paragraphs.forEach(paragraph => {
+        // 检查是否是标题（以数字和点开头）
+        if (/^\d+\.\s+.+/.test(paragraph)) {
+            // 是标题，创建h4
+            html += `<h4>${paragraph}</h4>`;
+        } 
+        // 检查是否是列表项（以-或*开头）
+        else if (paragraph.trim().split('\n').every(line => /^[\-\*]\s+.+/.test(line.trim()))) {
+            // 是列表，创建ul
+            html += '<ul>';
+            paragraph.trim().split('\n').forEach(line => {
+                const content = line.trim().replace(/^[\-\*]\s+/, '');
+                html += `<li>${content}</li>`;
+            });
+            html += '</ul>';
+        } 
+        // 普通段落
+        else {
+            html += `<p>${paragraph}</p>`;
+        }
+    });
+    
+    // 添加重新分析按钮，使用onclick定义全局函数调用
+    html += `<div class="analysis-actions">
+        <button class="small-btn" onclick="window.clearModelAnalysis()">重新分析</button>
+    </div>`;
+    
+    return html;
+}
+
+// 清除模型分析结果（定义为全局函数）
+window.clearModelAnalysis = function() {
+    // 移除localStorage中的分析结果
+    localStorage.removeItem('model-diet-exercise-analysis');
+    
+    // 获取分析元素
+    const analysisElement = document.getElementById('diet-exercise-analysis');
+    if (analysisElement) {
+        // 显示加载状态
+        analysisElement.innerHTML = '<div class="loading-spinner"></div> <p>正在重新分析数据...</p>';
+        
+        // 触发新的分析
+        getModelAnalysis(weightData).then(() => {
+            // 分析完成后更新UI
+            updateDietExerciseAnalysis();
+        }).catch(error => {
+            console.error('重新分析失败:', error);
+            // 分析失败后仍然更新UI
+            updateDietExerciseAnalysis();
+        });
+    }
+}; 
