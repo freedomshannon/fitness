@@ -56,10 +56,14 @@
         </main>
         
         <footer>
-            <p>© 2023 王德廷的个人减肥追踪网站</p>
+            <p>© <span id="current-year"></span> 王德廷的个人减肥追踪网站</p>
         </footer>
     </div>
     
     <script src="script.js"></script>
+    <script>
+        // 自动更新页脚年份
+        document.getElementById('current-year').textContent = new Date().getFullYear();
+    </script>
 </body>
 </html> 
