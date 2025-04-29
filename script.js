@@ -359,7 +359,7 @@ function updateWeightChange() {
     const weightChangeElement = document.getElementById('weight-change');
     
     if (weightData.length === 0) {
-        weightChangeElement.textContent = '还没有记录数据';
+        weightChangeElement.textContent = '还没有记录数据 📊';
         return;
     }
     
@@ -374,7 +374,7 @@ function updateWeightChange() {
     let message = '';
     
     // 第一行：显示当前体重
-    message += `当前体重: ${currentWeight} kg\n`;
+    message += `当前体重: ${currentWeight} kg ⚖️\n`;
     
     // 第二行：比较与上次记录的差异
     if (weightData.length > 1) {
@@ -383,25 +383,25 @@ function updateWeightChange() {
         const formattedDiff = Math.abs(difference).toFixed(1);
         
         if (difference < 0) {
-            message += `比昨天相比减少了 ${formattedDiff} kg! 🎉\n`;
+            message += `比昨天相比减少了 ${formattedDiff} kg! 🎉 👏\n`;
         } else if (difference > 0) {
-            message += `比昨天相比增加了 ${formattedDiff} kg\n`;
+            message += `比昨天相比增加了 ${formattedDiff} kg 💪 加油!\n`;
         } else {
-            message += `与昨天相比持平\n`;
+            message += `与昨天相比持平 ⚖️\n`;
         }
     } else {
-        message += `初始体重记录\n`;
+        message += `初始体重记录 🏁\n`;
     }
     
     // 第三行：距离目标还有多少
     if (currentWeight > targetWeight) {
         const toGoKg = (currentWeight - targetWeight).toFixed(1);
-        message += `距离目标体重(${targetWeight}kg)还有 ${toGoKg} kg`;
+        message += `距离目标体重(${targetWeight}kg)还有 ${toGoKg} kg 🎯 加油!`;
     } else if (currentWeight < targetWeight) {
         const belowTarget = (targetWeight - currentWeight).toFixed(1);
-        message += `已低于目标体重(${targetWeight}kg) ${belowTarget} kg`;
+        message += `已低于目标体重(${targetWeight}kg) ${belowTarget} kg 🏆 太棒了!`;
     } else {
-        message += `恭喜！已达到目标体重(${targetWeight}kg) 🎊`;
+        message += `恭喜！已达到目标体重(${targetWeight}kg) 🎊 🏆 🎯`;
     }
     
     // 设置显示样式
@@ -412,15 +412,19 @@ function updateWeightChange() {
     if (weightData.length > 1) {
         const difference = currentWeight - weightData[weightData.length - 2].weight;
         if (difference < 0) {
-            weightChangeElement.style.color = 'green';
+            weightChangeElement.style.color = '#28a745'; // 更鲜艳的绿色
         } else if (difference > 0) {
-            weightChangeElement.style.color = 'red';
+            weightChangeElement.style.color = '#6c757d'; // 灰色，不那么刺眼
         } else {
             weightChangeElement.style.color = '#333';
         }
     } else {
         weightChangeElement.style.color = '#333';
     }
+    
+    // 添加字体样式使其更醒目
+    weightChangeElement.style.fontSize = '1.1rem';
+    weightChangeElement.style.fontWeight = '500';
 }
 
 // Function to update history list
