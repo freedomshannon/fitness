@@ -320,11 +320,11 @@ function updateWeightChange() {
         const formattedDiff = Math.abs(difference).toFixed(1);
         
         if (difference < 0) {
-            message += `比上次减少了 ${formattedDiff} kg! 🎉\n`;
+            message += `比昨天相比减少了 ${formattedDiff} kg! 🎉\n`;
         } else if (difference > 0) {
-            message += `比上次增加了 ${formattedDiff} kg\n`;
+            message += `比昨天相比增加了 ${formattedDiff} kg\n`;
         } else {
-            message += `与上次持平\n`;
+            message += `与昨天相比持平\n`;
         }
     } else {
         message += `初始体重记录\n`;
@@ -461,7 +461,7 @@ async function callModelAPI(weightData) {
         console.log('准备分析数据:', recordToAnalyze);
         
         // 生成提示词
-        let prompt = "请分析以下健康记录数据，并提供饮食和运动方面的建议：\n\n";
+        let prompt = "请分析以下健康记录数据：\n\n";
         
         // 添加记录信息
         prompt += `日期: ${formatDate(recordToAnalyze.date)}\n`;
@@ -479,13 +479,8 @@ async function callModelAPI(weightData) {
             prompt += "饮食记录: 无\n";
         }
         
-        prompt += "\n请从以下几个方面分析：\n";
-        prompt += "1. 今日饮食分析及改进建议\n";
-        prompt += "2. 今日运动分析及改进建议\n";
-        prompt += "3. 针对今日饮食运动情况的健康建议\n";
-        prompt += "4. 个性化的改进方案\n\n";
-        prompt += "要求分析详细专业但通俗易懂，直接给出分析结果，不要输出思考过程。";
-        
+        prompt += "\n计算出食物摄入和运动消耗的热量，最后输出格式务必为今日摄入食物热量是，运动消耗，热量差为。";
+
         // 显示加载状态
         const analysisElement = document.getElementById('diet-exercise-analysis');
         if (analysisElement) {
@@ -503,7 +498,7 @@ async function callModelAPI(weightData) {
                     messages: [
                         {
                             role: "system",
-                            content: "你是一位专业的健康顾问和营养师。请针对用户今日的健康记录提供详细的分析和建议。直接给出分析结果，不要显示思考过程。"
+                            content: "你是一位专业的健康顾问和营养师。请针对用户今日的健康记录，计算出食物摄入和运动消耗的热量，最后输出格式务必为今日摄入食物热量是，运动消耗，热量差为。务必纯文字输出"
                         },
                         {
                             role: "user",
