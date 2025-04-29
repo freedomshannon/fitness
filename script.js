@@ -1,5 +1,6 @@
 // Initialize variables for tracking data
 let weightData = [];
+let healthAnalysisData = [];
 
 // API URL - 替换为你的Cloudflare Worker URL
 const API_URL = 'https://fitnessdatabase.guba396.workers.dev/api/weight-data';
@@ -12,6 +13,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Load data from Cloudflare KV
     loadData();
+    
+    // Load health analysis data
+    loadHealthAnalysisData();
     
     // Setup form submission
     const form = document.getElementById('weight-form');
@@ -60,6 +64,33 @@ document.addEventListener('DOMContentLoaded', function() {
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+        
+        .health-analysis-list {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        
+        .health-analysis-item {
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        
+        .health-analysis-date {
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-bottom: 10px;
+        }
+        
+        .health-analysis-content {
+            line-height: 1.5;
+        }
     `;
     document.head.appendChild(style);
 });
@@ -86,6 +117,35 @@ async function loadData() {
             updateChart();
             updateWeightChange();
             updateHistoryList();
+            updateDietExerciseAnalysis();
+        }
+    }
+}
+
+// Function to load health analysis data from Cloudflare KV
+async function loadHealthAnalysisData() {
+    try {
+        const response = await fetch(`${API_URL}/health-analysis`);
+        if (!response.ok) {
+            throw new Error('Failed to fetch health analysis data');
+        }
+        const data = await response.json();
+        healthAnalysisData = data || [];
+        
+        // 保存到本地存储作为备份
+        localStorage.setItem('healthAnalysisData', JSON.stringify(healthAnalysisData));
+        
+        // 更新UI
+        updateHealthAnalysisList();
+        updateDietExerciseAnalysis();
+        
+    } catch (error) {
+        console.error('Error loading health analysis data:', error);
+        // 从本地存储加载备份数据
+        const savedData = localStorage.getItem('healthAnalysisData');
+        if (savedData) {
+            healthAnalysisData = JSON.parse(savedData);
+            updateHealthAnalysisList();
             updateDietExerciseAnalysis();
         }
     }
@@ -158,10 +218,13 @@ async function saveData() {
         analysisElement.innerHTML = '<div class="loading-spinner"></div> <p>正在分析今日饮食和运动数据...</p>';
         
         // 调用大模型API，只传入当前记录
-        callModelAPI([currentRecord]).then(analysisHTML => {
-            if (analysisHTML) {
+        callModelAPI([currentRecord]).then(analysisResult => {
+            if (analysisResult) {
                 // 分析完成后更新UI
-                analysisElement.innerHTML = analysisHTML;
+                analysisElement.innerHTML = analysisResult.html;
+                
+                // 将AI分析结果保存到KV
+                saveAnalysisToKV(date, analysisResult.analysis);
             } else {
                 console.error('大模型分析失败');
                 // 分析失败后显示错误信息
@@ -432,17 +495,130 @@ function updateDietExerciseAnalysis() {
     const analysisElement = document.getElementById('diet-exercise-analysis');
     if (!analysisElement) return;
     
-    // 从localStorage获取大模型分析结果
+    // 检查是否有健康分析数据
+    if (healthAnalysisData && healthAnalysisData.length > 0) {
+        // 获取最新的分析结果（按日期排序后的最后一项）
+        const latestAnalysis = [...healthAnalysisData].sort((a, b) => 
+            new Date(b.date) - new Date(a.date)
+        )[0];
+        
+        if (latestAnalysis) {
+            // 格式化并显示最新的分析结果
+            let html = formatModelAnalysis(latestAnalysis.analysis);
+            analysisElement.innerHTML = html;
+            
+            // 添加查看历史分析按钮
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = 'analysis-actions';
+            
+            const historyBtn = document.createElement('button');
+            historyBtn.className = 'small-btn';
+            historyBtn.textContent = '查看历史分析';
+            historyBtn.onclick = toggleHealthAnalysisHistory;
+            
+            actionsDiv.appendChild(historyBtn);
+            analysisElement.appendChild(actionsDiv);
+            return;
+        }
+    }
+    
+    // 从localStorage获取大模型分析结果（兼容旧版本）
     const modelAnalysis = localStorage.getItem('model-diet-exercise-analysis');
     
     if (modelAnalysis) {
         // 如果有大模型分析结果，直接显示
         analysisElement.innerHTML = modelAnalysis;
+        
+        // 添加查看历史分析按钮
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'analysis-actions';
+        
+        const historyBtn = document.createElement('button');
+        historyBtn.className = 'small-btn';
+        historyBtn.textContent = '查看历史分析';
+        historyBtn.onclick = toggleHealthAnalysisHistory;
+        
+        actionsDiv.appendChild(historyBtn);
+        analysisElement.appendChild(actionsDiv);
     } else {
         // 如果没有大模型分析结果，显示等待提示
         let content = '<h3>AI健康分析</h3>';
         content += '<p>请先记录体重、饮食或运动数据，保存后系统将自动分析</p>';
         analysisElement.innerHTML = content;
+    }
+}
+
+// 更新健康分析历史列表
+function updateHealthAnalysisList() {
+    // 检查是否已经有健康分析历史列表元素
+    let healthAnalysisList = document.getElementById('health-analysis-list');
+    
+    // 如果没有，则创建一个
+    if (!healthAnalysisList) {
+        // 获取数据可视化section
+        const dataVisualizationSection = document.querySelector('.data-visualization');
+        if (!dataVisualizationSection) return;
+        
+        // 创建健康分析历史列表容器
+        healthAnalysisList = document.createElement('div');
+        healthAnalysisList.id = 'health-analysis-list';
+        healthAnalysisList.className = 'health-analysis-list';
+        healthAnalysisList.style.display = 'none'; // 默认隐藏
+        
+        // 添加到数据可视化section之后
+        dataVisualizationSection.appendChild(healthAnalysisList);
+    }
+    
+    // 清空列表
+    healthAnalysisList.innerHTML = '';
+    
+    // 确保有健康分析数据
+    if (!healthAnalysisData || healthAnalysisData.length === 0) {
+        const noDataMessage = document.createElement('p');
+        noDataMessage.textContent = '暂无健康分析记录';
+        noDataMessage.style.textAlign = 'center';
+        noDataMessage.style.padding = '20px';
+        healthAnalysisList.appendChild(noDataMessage);
+        return;
+    }
+    
+    // 按日期逆序排序（最新的在前面）
+    const sortedAnalysisData = [...healthAnalysisData].sort((a, b) => 
+        new Date(b.date) - new Date(a.date)
+    );
+    
+    // 创建健康分析项
+    sortedAnalysisData.forEach(item => {
+        const analysisItem = document.createElement('div');
+        analysisItem.className = 'health-analysis-item';
+        
+        const dateElement = document.createElement('div');
+        dateElement.className = 'health-analysis-date';
+        dateElement.textContent = formatDate(item.date);
+        
+        const contentElement = document.createElement('div');
+        contentElement.className = 'health-analysis-content';
+        contentElement.textContent = item.analysis;
+        
+        analysisItem.appendChild(dateElement);
+        analysisItem.appendChild(contentElement);
+        healthAnalysisList.appendChild(analysisItem);
+    });
+}
+
+// 切换健康分析历史列表的显示/隐藏
+function toggleHealthAnalysisHistory() {
+    const healthAnalysisList = document.getElementById('health-analysis-list');
+    if (!healthAnalysisList) return;
+    
+    const isCurrentlyHidden = healthAnalysisList.style.display === 'none';
+    
+    if (isCurrentlyHidden) {
+        healthAnalysisList.style.display = 'block';
+        this.textContent = '隐藏历史分析';
+    } else {
+        healthAnalysisList.style.display = 'none';
+        this.textContent = '查看历史分析';
     }
 }
 
@@ -531,7 +707,8 @@ async function callModelAPI(weightData) {
             // 保存到localStorage
             localStorage.setItem('model-diet-exercise-analysis', analysisHTML);
             
-            return analysisHTML;
+            // 返回分析结果和格式化后的HTML
+            return { html: analysisHTML, analysis: analysis, date: recordToAnalyze.date };
             
         } catch (error) {
             console.error('大模型API调用失败:', error);
@@ -604,11 +781,29 @@ window.reanalyzeWithModel = function() {
     // 显示加载状态
     analysisElement.innerHTML = '<div class="loading-spinner"></div> <p>正在调用AI分析...</p>';
     
+    // 获取当前日期
+    const date = document.getElementById('date').value;
+    
     // 调用大模型API
-    callModelAPI(weightData).then(analysisHTML => {
-        if (analysisHTML) {
+    callModelAPI(weightData).then(analysisResult => {
+        if (analysisResult) {
             // 分析成功，直接更新UI
-            analysisElement.innerHTML = analysisHTML;
+            analysisElement.innerHTML = analysisResult.html;
+            
+            // 添加查看历史分析按钮
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = 'analysis-actions';
+            
+            const historyBtn = document.createElement('button');
+            historyBtn.className = 'small-btn';
+            historyBtn.textContent = '查看历史分析';
+            historyBtn.onclick = toggleHealthAnalysisHistory;
+            
+            actionsDiv.appendChild(historyBtn);
+            analysisElement.appendChild(actionsDiv);
+            
+            // 将分析结果保存到KV
+            saveAnalysisToKV(analysisResult.date, analysisResult.analysis);
         } else {
             // 分析失败，显示错误信息和重试按钮
             let errorContent = '<h3>AI健康分析</h3>';
@@ -637,5 +832,62 @@ function displayRecordAnalysis() {
             <button class="small-btn" onclick="window.reanalyzeWithModel()">开始分析</button>
         </div>`;
         analysisElement.innerHTML = content;
+    }
+}
+
+// 将AI分析结果保存到KV
+async function saveAnalysisToKV(date, analysis) {
+    try {
+        // 首先从KV获取现有的分析结果
+        const analysisResponse = await fetch(`${API_URL}/health-analysis`);
+        let healthAnalysisData = [];
+        
+        if (analysisResponse.ok) {
+            healthAnalysisData = await analysisResponse.json() || [];
+        }
+        
+        // 检查是否已有该日期的分析结果
+        const existingIndex = healthAnalysisData.findIndex(item => item.date === date);
+        
+        // 创建新的分析结果对象
+        const analysisRecord = {
+            date: date,
+            analysis: analysis,
+            timestamp: new Date().toISOString()
+        };
+        
+        if (existingIndex >= 0) {
+            // 更新现有的分析结果
+            healthAnalysisData[existingIndex] = analysisRecord;
+        } else {
+            // 添加新的分析结果
+            healthAnalysisData.push(analysisRecord);
+        }
+        
+        // 按日期排序
+        healthAnalysisData.sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        // 保存到KV
+        const saveResponse = await fetch(`${API_URL}/health-analysis`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(healthAnalysisData)
+        });
+        
+        if (!saveResponse.ok) {
+            throw new Error('Failed to save health analysis data');
+        }
+        
+        console.log('分析结果保存成功');
+        
+        // 保存成功后，更新本地缓存
+        localStorage.setItem('healthAnalysisData', JSON.stringify(healthAnalysisData));
+        
+    } catch (error) {
+        console.error('Error saving analysis:', error);
+        // 不弹出警告，避免打扰用户
+        console.log('分析结果保存失败，将只保存在本地');
     }
 } 

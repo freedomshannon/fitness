@@ -1,5 +1,6 @@
 // 定义 KV 数据键名
 const WEIGHT_DATA_KEY = 'weight-data';
+const HEALTH_ANALYSIS_KEY = 'health-analysis-data';
 
 // 处理请求的主函数
 async function handleRequest(request) {
@@ -21,7 +22,7 @@ async function handleRequest(request) {
   const url = new URL(request.url);
   const method = request.method;
 
-  // 只处理 /api/weight-data 路径的请求
+  // 处理体重数据路径
   if (url.pathname === '/api/weight-data') {
     if (method === 'GET') {
       const response = await getWeightData();
@@ -36,6 +37,38 @@ async function handleRequest(request) {
       });
     } else if (method === 'POST') {
       const response = await saveWeightData(request);
+      // 添加CORS头
+      const newHeaders = new Headers(response.headers);
+      Object.keys(corsHeaders).forEach(key => {
+        newHeaders.set(key, corsHeaders[key]);
+      });
+      return new Response(response.body, {
+        status: response.status,
+        headers: newHeaders
+      });
+    } else {
+      return new Response('Method not allowed', { 
+        status: 405,
+        headers: corsHeaders
+      });
+    }
+  }
+  
+  // 处理健康分析数据路径
+  if (url.pathname === '/api/weight-data/health-analysis') {
+    if (method === 'GET') {
+      const response = await getHealthAnalysisData();
+      // 添加CORS头
+      const newHeaders = new Headers(response.headers);
+      Object.keys(corsHeaders).forEach(key => {
+        newHeaders.set(key, corsHeaders[key]);
+      });
+      return new Response(response.body, {
+        status: response.status,
+        headers: newHeaders
+      });
+    } else if (method === 'POST') {
+      const response = await saveHealthAnalysisData(request);
       // 添加CORS头
       const newHeaders = new Headers(response.headers);
       Object.keys(corsHeaders).forEach(key => {
@@ -115,6 +148,67 @@ async function saveWeightData(request) {
     // 处理错误情况
     console.error('Error saving data to KV:', error);
     return new Response(JSON.stringify({ error: 'Failed to save data' }), {
+      headers: { 'Content-Type': 'application/json' },
+      status: 500
+    });
+  }
+}
+
+// 获取健康分析数据
+async function getHealthAnalysisData() {
+  try {
+    // 从 KV 存储中获取数据
+    const data = await WEIGHT_TRACKER.get(HEALTH_ANALYSIS_KEY);
+    
+    // 如果数据存在，解析并返回
+    if (data) {
+      return new Response(data, {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200
+      });
+    } else {
+      // 如果数据不存在，返回空数组
+      return new Response('[]', {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200
+      });
+    }
+  } catch (error) {
+    // 处理错误情况
+    console.error('Error fetching health analysis data from KV:', error);
+    return new Response(JSON.stringify({ error: 'Failed to fetch health analysis data' }), {
+      headers: { 'Content-Type': 'application/json' },
+      status: 500
+    });
+  }
+}
+
+// 保存健康分析数据
+async function saveHealthAnalysisData(request) {
+  try {
+    // 解析请求体
+    const data = await request.json();
+    
+    // 验证数据格式
+    if (!Array.isArray(data)) {
+      return new Response(JSON.stringify({ error: 'Invalid data format' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 400
+      });
+    }
+    
+    // 将数据存储到 KV
+    await WEIGHT_TRACKER.put(HEALTH_ANALYSIS_KEY, JSON.stringify(data));
+    
+    // 返回成功响应
+    return new Response(JSON.stringify({ success: true }), {
+      headers: { 'Content-Type': 'application/json' },
+      status: 200
+    });
+  } catch (error) {
+    // 处理错误情况
+    console.error('Error saving health analysis data to KV:', error);
+    return new Response(JSON.stringify({ error: 'Failed to save health analysis data' }), {
       headers: { 'Content-Type': 'application/json' },
       status: 500
     });
